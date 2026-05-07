@@ -1,3 +1,4 @@
+
 import logging
 import requests
 import json
@@ -5,7 +6,10 @@ import os
 import re
 from base64 import b64encode
 from datetime import datetime, timezone
+from app.core.config import get_settings
 from app.core.db import get_connection
+from app.core.task_logger import log_task_event
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +20,8 @@ class OpenWRTClient:
         self.password = password
         self.token = None
         self.session = requests.Session()
+
+        self.config_file = "data/openwrt_config.json" # Path to store last_sync
 
     def login(self):
         """Authenticate with OpenWRT via ubus session login"""
@@ -195,12 +201,22 @@ class OpenWRTClient:
              
         return {"deltas": deltas, "totals": current_stats}
 
-    def sync(self):
+    def sync(self, force: bool = False):
         """Pull data and update DB: DHCP Leases = Dynamic, Others = Static"""
-        with open("debug_sync.log", "a") as f: f.write(f"\n--- Starting Sync at {datetime.now()} ---\n")
+        os.makedirs("data", exist_ok=True) # Ensure data directory exists for config file
+
+
+
         logger.info("Starting OpenWRT Sync...")
-        os.makedirs("data", exist_ok=True)
+        log_task_event(
+            task_type="openwrt_sync", 
+            event_type="started", 
+            message="Starting OpenWRT sync", 
+            target="openwrt"
+        )
         
+        start_time = time.time()
+
         try:
             self.login()
             
@@ -323,7 +339,50 @@ class OpenWRTClient:
                 
             finally:
                 conn.close()
+            
+            # Update last_sync timestamp in config but preserve state
+            try:
+                # Read current config to get latest state
+                current_config = {}
+                if os.path.exists(self.config_file):
+                    with open(self.config_file, 'r') as f:
+                        current_config = json.load(f)
+                
+                # Update timestamp
+                current_config["last_sync"] = datetime.utcnow().isoformat()
+                
+                # Write back
+                with open(self.config_file, 'w') as f:
+                    json.dump(current_config, f, indent=4)
+                    
+            except Exception as e:
+                logger.error(f"Failed to update OpenWRT last_sync: {e}")
+
+            duration = int((time.time() - start_time) * 1000)
+            logger.info(f"OpenWRT Sync complete: {len(leases)} leases processed.")
+            
+            log_task_event(
+                task_type="openwrt_sync", 
+                event_type="completed", 
+                message=f"OpenWRT sync completed. Processed {len(leases)} leases.", 
+                target="openwrt",
+                duration_ms=duration,
+                details={"leases_count": len(leases), "updated_devices": updated_count}
+            )
+            
+            return True
                 
         except Exception as e:
             logger.error(f"OpenWRT Sync Failed: {e}", exc_info=True)
             with open("debug_sync.log", "a") as f: f.write(f"Sync Exception: {e}\n")
+            
+            log_task_event(
+                task_type="openwrt_sync", 
+                event_type="failed", 
+                message=f"OpenWRT sync failed: {str(e)}", 
+                target="openwrt",
+                level="ERROR",
+                details={"error": str(e)}
+            )
+            
+            raise e

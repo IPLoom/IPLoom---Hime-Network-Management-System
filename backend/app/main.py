@@ -83,6 +83,9 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytic
 from app.routers.logs import router as logs_router
 app.include_router(logs_router, prefix="/api/v1/logs", tags=["logs"])
 
+from app.routers.task_events import router as task_events_router
+app.include_router(task_events_router, prefix="/api/v1/task-events", tags=["task-events"])
+
 from app.routers.topology import router as topology_router
 app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"])
 app.include_router(system_router, prefix="/api/v1/system", tags=["system"])

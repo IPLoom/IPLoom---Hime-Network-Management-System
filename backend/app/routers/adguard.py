@@ -34,6 +34,7 @@ def get_config():
     finally:
         conn.close()
 
+from datetime import datetime, timezone
 @router.post("/config")
 def save_config(config: AdguardConfig):
     conn = get_connection()
@@ -41,14 +42,23 @@ def save_config(config: AdguardConfig):
         # Check if table exists
         conn.execute("CREATE TABLE IF NOT EXISTS integrations (name TEXT PRIMARY KEY, config JSON)")
         
+        # Fetch existing to merge
+        row = conn.execute("SELECT config FROM integrations WHERE name = 'adguard'").fetchone()
+        existing = json.loads(row[0]) if row else {}
+        
         # Store
         data = config.dict()
+        # Merge existing state fields (last_sync, last_run, etc.)
+        for key in ["last_sync", "last_run", "verified", "last_check"]:
+            if key in existing and key not in data:
+                data[key] = existing[key]
+
         # Verify immediately
         try:
             client = AdguardClient(data["url"], data["username"], data["password"])
             client.test_connection()
             data["verified"] = True
-            data["last_check"] = "now" # placeholder, updated in verify
+            data["last_check"] = datetime.now(timezone.utc).isoformat()
         except Exception as e:
             logger.warning(f"Adguard verification failed during save: {e}")
             data["verified"] = False
@@ -89,7 +99,7 @@ def trigger_sync(background_tasks: BackgroundTasks):
              
         client = AdguardClient(conf["url"], conf.get("username"), conf.get("password"))
         
-        background_tasks.add_task(client.sync)
+        background_tasks.add_task(client.sync, force=True)
         return {"status": "queued", "message": "Adguard sync started in background"}
     finally:
         conn.close()

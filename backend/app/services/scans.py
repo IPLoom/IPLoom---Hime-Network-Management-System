@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from scapy.all import ARP, Ether, srp, conf
 from app.core.db import get_connection
+from app.core.config import get_settings
+from app.core.task_logger import log_task_event
+import time
 
 if sys.platform == "win32":
     try:
@@ -133,10 +136,19 @@ async def scan_device(device_id: str, ip: str) -> List[Dict[str, Any]]:
     return found
 
 async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", options: Optional[Dict[str, Any]] = None):
+    job_start = datetime.now(timezone.utc)
+    start_time = time.time()
+    
+    logger.info(f"Starting scan job {scan_id} for target: {target}")
+    log_task_event(
+        task_type="scan", 
+        event_type="started", 
+        message=f"Starting IP scan for target {target}", 
+        target=target,
+        details={"scan_id": scan_id, "target": target}
+    )
+
     try:
-        job_start = datetime.now(timezone.utc)
-        logger.info(f"Starting scan job {scan_id} for target {target}")
-        
         # 1. Ensure scan status is running with a start time
         def start_scan():
             conn = get_connection()
@@ -243,9 +255,8 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
                 found_map[p["ip"]] = p
             else:
                 # If ARP found it but has a missing mac (unlikely but possible), take it from ping/cache
-                if not found_map[p["ip"]].get("mac") or found_map[p["ip"]]["mac"] == "unknown":
-                    if p.get("mac") and p["mac"] != "unknown":
-                        found_map[p["ip"]]["mac"] = p["mac"]
+                if p.get("mac") and p["mac"] != "unknown":
+                    found_map[p["ip"]]["mac"] = p["mac"]
         
         unique_devices = list(found_map.values())
         logger.info(f"Discovery phase complete. Scapy: {len(arp_results)}, Ping: {len(ping_results)}. Unique: {len(unique_devices)}")
@@ -315,20 +326,79 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         from app.services.devices import publish_device_offline
         for d_id, d_ip, d_mac, d_name, d_vendor, d_icon in offline_list:
              await asyncio.to_thread(publish_device_offline, {
-                "id": d_id, "ip": d_ip, "mac": d_mac, "hostname": d_name, "vendor": d_vendor,
+                "id": d_id, "ip": d_ip, "mac": d_mac, "hostname": d_name, "vendor": d_vendor, 
                 "icon": d_icon, "status": "offline", "timestamp": datetime.now(timezone.utc).isoformat()
             })
 
-        logger.info(f"Scan job {scan_id} completed. Found {len(processed_results)} unique devices.")
+        duration = int((time.time() - start_time) * 1000)
+        logger.info(f"Scan job {scan_id} completed successfully. Found {len(processed_results)} devices.")
+        
+        log_task_event(
+            task_type="scan", 
+            event_type="completed", 
+            message=f"IP scan completed. Found {len(processed_results)} devices.", 
+            target=target,
+            duration_ms=duration,
+            details={"scan_id": scan_id, "device_count": len(processed_results)}
+        )
 
     except Exception as e:
         logger.error(f"Scan job {scan_id} failed: {e}")
         def fail_scan():
             conn = get_connection()
             try:
-                conn.execute("UPDATE scans SET status = 'error', finished_at = ?, error_message = ? WHERE id = ?", [datetime.now(timezone.utc), str(e), scan_id])
+                conn.execute("UPDATE scans SET status = 'failed', finished_at = ?, error_message = ? WHERE id = ?", [datetime.now(timezone.utc), str(e), scan_id])
                 conn.commit()
             finally:
                 conn.close()
         await asyncio.to_thread(fail_scan)
+        
+        
+        log_task_event(
+            task_type="scan", 
+            event_type="failed", 
+            message=f"IP scan failed: {str(e)}", 
+            target=target,
+            level="ERROR",
+            details={"scan_id": scan_id, "error": str(e)}
+        )
         raise e
+
+async def discover_network_scapy(subnets: List[str]):
+    """
+    Stand-alone global discovery function used by worker.
+    Scans subnets and updates devices in DB.
+    """
+    from app.services.devices import batch_upsert_devices
+    
+    all_results = []
+    logger.info(f"Running global discovery for: {subnets}")
+    
+    for subnet in subnets:
+        try:
+            ans, unans = srp(Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=subnet), timeout=2, verbose=False)
+            for sent, rcve in ans:
+                all_results.append({"ip": rcve.psrc, "mac": rcve.hwsrc})
+        except Exception as e:
+            logger.error(f"Global discovery failed for {subnet}: {e}")
+            
+    # Deduplicate
+    unique_map = {d["ip"]: d for d in all_results}
+    unique_devs = list(unique_map.values())
+    
+    if unique_devs:
+        logger.info(f"Global discovery found {len(unique_devs)} devices. Updating DB.")
+        # We need to resolve hostnames? For speed in global discovery maybe just basic update
+        # But batch_upsert requires 'ports' field?
+        
+        batch_data = []
+        for d in unique_devs:
+            batch_data.append({
+                "ip": d["ip"],
+                "mac": d["mac"],
+                "hostname": "unknown", # fast scan, skip hostname for now?
+                "ports": [] 
+            })
+            
+        await batch_upsert_devices(batch_data)
+

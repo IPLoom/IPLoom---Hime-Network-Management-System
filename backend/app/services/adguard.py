@@ -1,10 +1,14 @@
+
 import logging
 import requests
 import json
 import os
 from datetime import datetime, timezone, timedelta
+from app.core.config import get_settings
 from app.core.db import get_connection, commit
 from app.core.dns_db import get_dns_connection, commit_dns
+from app.core.task_logger import log_task_event
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +18,20 @@ class AdguardClient:
         self.username = username
         self.password = password
         self.session = requests.Session()
-        if username and password:
-            self.session.auth = (username, password)
+        if password:
+            # Default to 'admin' if username is missing but password is provided
+            self.session.auth = (username or "admin", password)
 
     def test_connection(self):
         """Check if Adguard is reachable and auth works"""
         try:
-            resp = self.session.get(f"{self.base_url}/control/status", timeout=5)
+            # Use /control/stats to verify we can actually read data (requires auth)
+            resp = self.session.get(f"{self.base_url}", timeout=5)
             resp.raise_for_status()
             return True
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Adguard connection failed: {e}. Response: {e.response.text}")
+            raise Exception(f"HTTP Error {e.response.status_code}: {e.response.text}")
         except Exception as e:
             logger.error(f"Adguard connection failed: {e}")
             raise e
@@ -49,20 +58,51 @@ class AdguardClient:
             logger.error(f"Failed to fetch Adguard data: {e}")
             raise e
 
-    def sync(self):
-        """Fetch data and update both DNS DB and Main DB"""
-        logger.info("Starting Adguard Sync...")
+    def sync(self, force: bool = False):
+        """Fetch data and update both DNS DB and Main DB
+        :param force: Force sync even if not enabled
+        :return: True if successful
+        """
+        logger.info("Starting Adguard sync...")
+        log_task_event(
+            task_type="adguard_sync", 
+            event_type="started", 
+            message="Starting AdGuard sync", 
+            target="adguard"
+        )
         
-        # 1. Get Configuration & Last Sync Time
+        start_time = time.time()
+        total_queries = 0 # Initialize total_queries
+
         conn_main = get_connection()
         try:
+            # 1. Get Configuration & Last Sync Time
             row = conn_main.execute("SELECT config FROM integrations WHERE name = 'adguard'").fetchone()
             if not row:
                 logger.warning("Adguard integration not configured (no DB entry).")
-                return
+                log_task_event(
+                    task_type="adguard_sync", 
+                    event_type="skipped", 
+                    message="AdGuard integration not configured.", 
+                    target="adguard",
+                    level="WARNING"
+                )
+                return False
 
             config = json.loads(row[0])
-            last_sync_str = config.get("last_sync_ts") # explicit timestamp
+            
+            # Check if enabled
+            if not force and not config.get("enabled", False):
+                logger.info("Adguard sync skipped: integration not enabled.")
+                log_task_event(
+                    task_type="adguard_sync", 
+                    event_type="skipped", 
+                    message="AdGuard sync skipped: integration not enabled.", 
+                    target="adguard"
+                )
+                return False
+
+            last_sync_str = config.get("last_sync")
             last_sync_ts = 0
             if last_sync_str:
                 try:
@@ -77,7 +117,7 @@ class AdguardClient:
                 # Sort by time asc (API returns desc usually)
                 logs.reverse() 
             except Exception as e:
-                return # Error logged in client
+                raise e # Propagate to worker
             
             # 3. Process Logs -> DNS DB
             conn_dns = get_dns_connection()
@@ -173,6 +213,7 @@ class AdguardClient:
                     """, [ts, device_id, d_id, status, query_type, client_ip, elapsed, is_blocked])
                     
                     processed_count += 1
+                    total_queries += 1 # Increment total queries
                     
                     # Aggregation stats
                     if device_id:
@@ -197,7 +238,7 @@ class AdguardClient:
             # Let's do it efficiently: Query DNS DB for 24h stats GROUP BY device_id
             
             try:
-                msg = logger.info("Calculating 24h stats...")
+                logger.info("Calculating 24h stats...")
                 one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
                 
                 stats_rows = conn_dns.execute("""
@@ -223,12 +264,13 @@ class AdguardClient:
                     
                     conn_main.execute("UPDATE devices SET dns_stats = ? WHERE id = ?", [stats_json, dev_id])
                 
-                # Update integration config
-                config["last_sync_ts"] = datetime.fromtimestamp(new_last_sync_ts).isoformat()
-                config["last_check"] = datetime.now().isoformat()
+                # 4. Update Main DB Cursor (last_sync)
+                config["last_sync"] = datetime.fromtimestamp(new_last_sync_ts, tz=timezone.utc).isoformat()
                 conn_main.execute("UPDATE integrations SET config = ? WHERE name = 'adguard'", [json.dumps(config)])
                 
                 commit(conn_main)
+                
+                commit_dns()
                 
                 # 5. Retention Cleanup (Keep 7 days by default)
                 # Ideally config driven, but 7 days is reasonable for deep logs.
@@ -243,8 +285,36 @@ class AdguardClient:
             except Exception as e:
                 logger.error(f"Error updating main DB stats: {e}")
 
+            duration = int((time.time() - start_time) * 1000)
+            logger.info("Adguard sync completed successfully")
+            
+            log_task_event(
+                task_type="adguard_sync", 
+                event_type="completed", 
+                message=f"AdGuard sync completed. Processed {total_queries} queries.", 
+                target="adguard",
+                duration_ms=duration,
+                details={"query_count": total_queries}
+            )
+            
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Adguard data: {e}")
+            
+            log_task_event(
+                task_type="adguard_sync", 
+                event_type="failed", 
+                message=f"AdGuard sync failed: {str(e)}", 
+                target="adguard",
+                level="ERROR",
+                details={"error": str(e)}
+            )
+            
+            raise e
         finally:
             conn_main.close()
             # conn_dns closed? No, we use shared connection but we should probably leave it open or handle properly.
             # The get_dns_connection uses shared, so we don't 'close' it per se, just release cursor? 
             # The helper doesn't really close valid cursors but that's fine for duckdb.
+

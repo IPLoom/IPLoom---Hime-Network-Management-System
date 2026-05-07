@@ -60,6 +60,11 @@ def save_config(config: OpenWRTConfig):
         if config.password is None or config.password == "*****":
              new_conf["password"] = existing.get("password")
         
+        # Merge existing state fields
+        for key in ["last_sync", "last_run"]:
+            if key in existing and key not in new_conf:
+                new_conf[key] = existing[key]
+        
         # Auto-verify on save
         verified = False
         if new_conf.get("url") and new_conf.get("enabled", True):
@@ -122,11 +127,12 @@ async def trigger_sync(background_tasks: BackgroundTasks):
              raise HTTPException(status_code=400, detail="Configuration not verified. Please save or test connection first.")
              
         conf = json.loads(row[0])
-        if not conf.get("enabled", True):
-             raise HTTPException(status_code=400, detail="Integration disabled")
+        # Allow manual sync even if disabled
+        # if not conf.get("enabled", True):
+        #      raise HTTPException(status_code=400, detail="Integration disabled")
              
         client = OpenWRTClient(conf["url"], conf["username"], conf["password"])
-        background_tasks.add_task(client.sync)
+        background_tasks.add_task(client.sync, force=True)
         return {"status": "queued", "message": "Sync started in background"}
     finally:
         conn.close()
