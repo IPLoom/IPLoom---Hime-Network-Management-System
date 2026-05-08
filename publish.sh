@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# HNMS Docker Publishing Script
-# This script automates the build and push process for the monolithic HNMS image.
+# IPLoom Docker Publishing Script
+# This script automates the build and push process for the monolithic IPLoom image.
 
 # Set your Docker Hub username here or pass as an argument
 DOCKER_USER=${1:-"wglabz"}
-IMAGE_NAME="hnms"
+IMAGE_NAME="iploom"
 
 # Read and increment version
 VERSION_FILE="VERSION"

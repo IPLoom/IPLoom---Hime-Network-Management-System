@@ -3,8 +3,8 @@ version: "3.9"
 services:
   app:
     # build: .
-    image: wglabz/hnms:latest
-    container_name: hnms-monolith
+    image: wglabz/iploom:latest
+    container_name: iploom-monolith
     # Use host networking on Linux for best Nmap results
     network_mode: "host" 
     # ports:

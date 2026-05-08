@@ -6,7 +6,7 @@ PORT=${PORT:-8001}
 WORKERS=${WORKERS:-1}
 APP_MODULE=${APP_MODULE:-"app.main:app"}
 
-echo "🚀 Starting HNMS in $APP_ENV mode..."
+echo "🚀 Starting IPLoom in $APP_ENV mode..."
 
 if [ "$APP_ENV" = "development" ]; then
     echo "🛠️  Development mode: Hot reload enabled."
