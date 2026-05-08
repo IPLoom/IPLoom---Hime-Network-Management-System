@@ -39,7 +39,7 @@
     <div v-if="!compact" class="flex flex-col leading-none">
       <span
         class="text-xl font-black tracking-tighter text-slate-900 dark:text-white uppercase transition-colors group-hover:text-blue-500">
-        HNMS
+        IPLoom
       </span>
       <span class="text-[8px] font-black tracking-[0.3em] text-slate-400 dark:text-slate-500 uppercase mt-0.5">Network
         OS</span>

@@ -90,7 +90,7 @@ class MQTTManager:
             import os
             import random
             # Add random suffix to PID to be extra sure across rapid reloads
-            client_id = f"hnms_main_{os.getpid()}_{random.randint(1000, 9999)}"
+            client_id = f"iploom_main_{os.getpid()}_{random.randint(1000, 9999)}"
             logger.info(f"Initializing persistent MQTT client with unique ID: {client_id}")
             
             self._client = get_mqtt_client(client_id)
@@ -151,7 +151,7 @@ class MQTTManager:
         """Tests connection to the broker and updates status."""
         import threading
         config = custom_config or self.get_config()
-        client_id = f"hnms_test_{int(time.time())}"
+        client_id = f"iploom_test_{int(time.time())}"
         client = get_mqtt_client(client_id)
         
         logger.info(f"Testing MQTT connection to {config['broker']}:{config['port']}")
@@ -261,7 +261,7 @@ def publish_ha_discovery(device_info: dict):
     mac = device_info.get("mac")
     if not mac: return
     
-    unique_id = f"hnms_{mac.replace(':', '').lower()}"
+    unique_id = f"iploom_{mac.replace(':', '').lower()}"
     discovery_topic = f"homeassistant/device_tracker/{unique_id}/config"
     
     discovery_payload = {
@@ -292,7 +292,7 @@ def publish_device_status(device_info: dict, status: str):
     key = mac.replace(":", "").lower()
     base_topic = config['base_topic']
     
-    state_topic = f"{base_topic}/devices/hnms_{key}/status"
+    state_topic = f"{base_topic}/devices/iploom_{key}/status"
     # Also publish to generic topic for HA compatibility if needed, 
     # but let's stick to the discovery config structure:
     # state_topic: f"{config['base_topic']}/devices/{unique_id}/status"
@@ -301,7 +301,7 @@ def publish_device_status(device_info: dict, status: str):
     publish_mqtt(state_topic, state_val, retain=True)
     
     # Publish attributes
-    attr_topic = f"{base_topic}/devices/hnms_{key}/attributes"
+    attr_topic = f"{base_topic}/devices/iploom_{key}/attributes"
     # Filter out internal DB fields and format for HA
     last_seen = device_info.get("last_seen")
     if hasattr(last_seen, 'isoformat'):
@@ -317,7 +317,7 @@ def publish_device_status(device_info: dict, status: str):
         "type": device_info.get("device_type"),
         "ip_type": device_info.get("ip_type"),
         "last_seen": last_seen_str,
-        "scanner": "HNMS"
+        "scanner": "IPLoom"
     }
     publish_mqtt(attr_topic, ha_attributes, retain=True)
     
