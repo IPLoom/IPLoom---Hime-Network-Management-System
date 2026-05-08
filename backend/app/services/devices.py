@@ -50,7 +50,7 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 device_id = None
                 existing_device = None
                 
-                if mac:
+                if mac and mac.lower() != "unknown":
                     existing_device = conn.execute(
                         "SELECT id, first_seen, last_seen, ip, ip_type, attributes, status FROM devices WHERE mac = ?", 
                         [mac]
