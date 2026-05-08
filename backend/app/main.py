@@ -54,8 +54,8 @@ def cleanup_stale_scans():
 
 @app.on_event("startup")
 async def on_startup():
-    await asyncio.to_thread(cleanup_stale_scans)
     await asyncio.to_thread(init_db)
+    await asyncio.to_thread(cleanup_stale_scans)
     
     # OUI downloader was permanently removed due to high CPU usage on Raspberry Pi.
     # Vendor identification now relies on hardcoded COMMON_OUIS and on-demand API enrichment.

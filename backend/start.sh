@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Extract APP_ENV from .env file safely (avoiding issues with unquoted spaces/comments)
+if [ -f .env ]; then
+    APP_ENV=$(grep '^APP_ENV=' .env | cut -d '=' -f2 | tr -d '\r')
+fi
+
 # Default settings
 HOST=${HOST:-0.0.0.0}
 PORT=${PORT:-8001}
@@ -10,8 +15,8 @@ echo "🚀 Starting IPLoom in $APP_ENV mode..."
 
 if [ "$APP_ENV" = "development" ]; then
     echo "🛠️  Development mode: Hot reload enabled."
-    # --reload implies single worker
-    exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" --reload --reload-exclude "data/*" --reload-exclude "mqtt_debug.log"
+    # Use --reload-dir app to avoid glob expansion errors on Windows
+    exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" --reload --reload-dir app
 else
     echo "🏭 Production mode: Running with $WORKERS worker(s)."
     exec python -m uvicorn "$APP_MODULE" --host "$HOST" --port "$PORT" --workers "$WORKERS"
