@@ -149,15 +149,18 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
     )
 
     try:
-        # 1. Ensure scan status is running with a start time
-        def start_scan():
+        # 1. Ensure scan status is running with a start time and fetch currently online devices
+        def start_scan_and_get_online():
             conn = get_connection()
             try:
                 conn.execute("UPDATE scans SET status = 'running', started_at = ?, error_message = NULL WHERE id = ?", [job_start, scan_id])
+                online = conn.execute("SELECT ip, mac, id FROM devices WHERE status = 'online'").fetchall()
                 conn.commit()
+                return [{"ip": r[0], "mac": r[1], "id": r[2]} for r in online]
             finally:
                 conn.close()
-        await asyncio.to_thread(start_scan)
+        
+        previously_online = await asyncio.to_thread(start_scan_and_get_online)
 
         # 2. Perform Network Discovery
         def network_discovery():
@@ -261,6 +264,50 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         unique_devices = list(found_map.values())
         logger.info(f"Discovery phase complete. Scapy: {len(arp_results)}, Ping: {len(ping_results)}. Unique: {len(unique_devices)}")
 
+        # 2.5 Intra-scan Retries for missing devices
+        missing_online = [d for d in previously_online if d["ip"] not in found_map and d["mac"] not in [ud.get("mac") for ud in unique_devices if ud.get("mac")]]
+        
+        if missing_online:
+            logger.info(f"Performing intra-scan retries for {len(missing_online)} missing devices...")
+            
+            async def retry_device(dev):
+                ip = dev["ip"]
+                mac_target = dev["mac"]
+                
+                for attempt in range(1, 4): # 3 retries
+                    logger.debug(f"Retry {attempt}/3 for {ip}...")
+                    # Try ARP first
+                    try:
+                        ans, _ = srp(Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip), timeout=1.5, verbose=False)
+                        if ans:
+                            res = {"ip": ans[0][1].psrc, "mac": ans[0][1].hwsrc}
+                            logger.info(f"Device {ip} recovered via ARP retry {attempt}")
+                            return res
+                    except: pass
+                    
+                    # Try Ping
+                    try:
+                        cmd = ["ping", "-n", "1", "-w", "800", ip] if sys.platform == "win32" else ["ping", "-c", "1", "-W", "1", ip]
+                        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=2)
+                        if result.returncode == 0:
+                            mac = get_mac_from_cache(ip) or mac_target
+                            logger.info(f"Device {ip} recovered via Ping retry {attempt}")
+                            return {"ip": ip, "mac": mac}
+                    except: pass
+                    
+                    if attempt < 3:
+                        await asyncio.sleep(2) # Wait between retries
+                
+                return None
+
+            retry_results = await asyncio.gather(*(retry_device(d) for d in missing_online))
+            for r in retry_results:
+                if r:
+                    unique_devices.append(r)
+                    found_map[r["ip"]] = r
+
+            logger.info(f"Retries complete. Recovered {len([r for r in retry_results if r])} devices. Final count: {len(unique_devices)}")
+
         # 3. Parallelize device enrichment
         semaphore = asyncio.Semaphore(4)
         async def process_single_device(device):
@@ -297,14 +344,24 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
             batch_data = [{"ip": r["ip"], "mac": r["mac"], "hostname": r["hostname"], "ports": r["ports_list"]} for r in processed_results]
             await batch_upsert_devices(batch_data)
 
-        # 5. Handle Offline state
+        # 5. Handle Offline state with missing_count threshold
         def finalize_scan():
             conn = get_connection()
             try:
                 final_now = datetime.now(timezone.utc)
-                offline_devices = conn.execute(
-                    "SELECT id, ip, mac, display_name, vendor, icon FROM devices WHERE status = 'online' AND last_seen < ?",
+                
+                # Increment missing_count for online devices not seen in this scan
+                conn.execute(
+                    "UPDATE devices SET missing_count = missing_count + 1 WHERE status = 'online' AND last_seen < ?",
                     [job_start]
+                )
+                
+                # Reset missing_count for devices that WERE seen (handled by batch_upsert_devices usually, but let's be safe)
+                # Actually batch_upsert_devices doesn't know about missing_count yet, so we'll update it there too.
+                
+                # Identify devices that reached the threshold
+                offline_devices = conn.execute(
+                    "SELECT id, ip, mac, display_name, vendor, icon FROM devices WHERE status = 'online' AND missing_count >= 3",
                 ).fetchall()
                 
                 for d_id, d_ip, d_mac, d_name, d_vendor, d_icon in offline_devices:

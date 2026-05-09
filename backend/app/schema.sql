@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS devices (
     icon          TEXT,
     is_trusted    BOOLEAN DEFAULT FALSE,
     status TEXT DEFAULT 'unknown',
+    missing_count INTEGER DEFAULT 0,
     ip_type       TEXT,
     open_ports    TEXT,
     attributes    TEXT,

@@ -80,7 +80,8 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                             device_type = COALESCE(device_type, ?),
                             icon = COALESCE(icon, ?),
                             open_ports = ?,
-                            status = ?
+                            status = ?,
+                            missing_count = 0
                         WHERE id = ?
                         """,
                         [now, ip, mac, hostname, guessed_type, guessed_icon, json.dumps(ports), 'online', device_id]
@@ -90,8 +91,8 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                     device_id = str(uuid4())
                     conn.execute(
                         """
-                        INSERT INTO devices (id, ip, mac, name, display_name, device_type, icon, ip_type, open_ports, first_seen, last_seen, attributes, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO devices (id, ip, mac, name, display_name, device_type, icon, ip_type, open_ports, first_seen, last_seen, attributes, status, missing_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                         """,
                         [device_id, ip, mac, hostname, hostname or ip, guessed_type, guessed_icon, data.get("ip_type"), json.dumps(ports), now, now, "{}", 'online']
                     )
@@ -120,7 +121,7 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 all_ports = [{"port": r[0], "protocol": r[1], "service": r[2]} for r in all_ports_rows]
 
                 conn.execute(
-                    "UPDATE devices SET open_ports = ?, last_seen = ?, status = 'online' WHERE id = ?",
+                    "UPDATE devices SET open_ports = ?, last_seen = ?, status = 'online', missing_count = 0 WHERE id = ?",
                     [json.dumps(all_ports), now, device_id]
                 )
 
@@ -220,23 +221,8 @@ async def enrich_device(device_id: str, mac: str):
         vendor = get_vendor_locally(mac)
     
     if not vendor:
-        url = f"https://api.macvendors.com/{mac}"
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, timeout=5.0)
-                if resp.status_code == 200:
-                    vendor = resp.text.strip()
-                elif resp.status_code == 429:
-                    logger.warning(f"Rate limited by macvendors.com for {mac}")
-                else:
-                    fallback_url = f"https://api.maclookup.app/v2/macs/{mac}"
-                    fresp = await client.get(fallback_url, timeout=5.0)
-                    if fresp.status_code == 200:
-                        fdata = fresp.json()
-                        if fdata.get("success") and fdata.get("company"):
-                             vendor = fdata["company"]
-        except Exception as e:
-            logger.warning(f"API Enrichment failed for {mac}: {e}")
+        from app.utilities.mac_lookup import get_vendor_from_api
+        vendor = await get_vendor_from_api(mac)
 
     if vendor:
         def sync_update():
