@@ -28,7 +28,7 @@ COPY backend/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 EXPOSE 80 8000
 
 # Environment variables (overridable)
-ENV DB_PATH=/data/network_scanner.duckdb \
+ENV DB_PATH=/data/final_scanner.duckdb \
     DB_SCHEMA_PATH=app/schema.sql \
     DB_INIT_MODE=create
 
