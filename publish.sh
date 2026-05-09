@@ -33,12 +33,13 @@ cd ..
 
 echo "🚀 Starting Docker build for $FULL_TAG..."
 
-# Build the monolithic image from the root directory
-# Note: Dockerfile now expects ui/dist to exist
-if docker build -t "$FULL_TAG" -t "$DOCKER_USER/$IMAGE_NAME:latest" .; then
+# Build the monolithic image from the root directory using Buildx for ARM64
+echo "🔨 Building for platform linux/arm64..."
+if docker buildx build --platform linux/arm64 -t "$FULL_TAG" -t "$DOCKER_USER/$IMAGE_NAME:latest" --load .; then
     echo "✅ Build successful!"
 else
     echo "❌ Build failed. Please check the logs above."
+    echo "💡 Hint: Ensure you have a buildx builder instance: 'docker buildx create --use'"
     exit 1
 fi
 
