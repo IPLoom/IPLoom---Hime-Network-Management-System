@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, List
 from app.core.db import get_connection
+from app.core.dns_db import get_dns_connection
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,38 @@ class TopologyService:
         """
         conn = get_connection()
         try:
-            # Fetch all active devices
-            rows = conn.execute(
-                "SELECT id, ip, mac, display_name, device_type, vendor, status, icon, parent_id FROM devices ORDER BY ip"
-            ).fetchall()
+            # Fetch all active devices with latest traffic rates (last 10 mins)
+            # We use QUALIFY row_number() to get the most recent rate per device
+            sql = """
+                SELECT 
+                    d.id, d.ip, d.mac, d.display_name, d.device_type, d.vendor, d.status, d.icon, d.parent_id,
+                    COALESCE(t.down_rate, 0) as down_rate,
+                    COALESCE(t.up_rate, 0) as up_rate,
+                    d.last_seen
+                FROM devices d
+                LEFT JOIN (
+                    SELECT device_id, down_rate, up_rate, timestamp
+                    FROM device_traffic_history
+                    WHERE timestamp >= current_timestamp - interval '10 minutes'
+                    QUALIFY row_number() OVER (PARTITION BY device_id ORDER BY timestamp DESC) = 1
+                ) t ON d.id = t.device_id
+                ORDER BY d.ip
+            """
+            rows = conn.execute(sql).fetchall()
+            
+            # Fetch DNS block counts in the last hour
+            block_counts = {}
+            try:
+                dns_conn = get_dns_connection()
+                dns_rows = dns_conn.execute("""
+                    SELECT device_id, COUNT(*) 
+                    FROM dns_logs 
+                    WHERE is_blocked = TRUE AND timestamp >= current_timestamp - interval '1 hour'
+                    GROUP BY device_id
+                """).fetchall()
+                block_counts = {r[0]: r[1] for r in dns_rows}
+            except Exception as e:
+                logger.warning(f"Failed to fetch DNS block counts for topology: {e}")
             
             nodes = {}
             edges = {}
@@ -39,12 +68,26 @@ class TopologyService:
                     "type": "Router",
                     "status": "online",
                     "ip": "Unknown",
-                    "icon": "Router"
+                    "icon": "Router",
+                    "down_rate": 0,
+                    "up_rate": 0,
+                    "last_seen": None,
+                    "block_count": 0,
+                    "open_ports": []
                 }
+
+            # Fetch all open ports
+            ports_rows = conn.execute("SELECT device_id, port, protocol, service FROM device_ports").fetchall()
+            ports_by_device = {}
+            for pr in ports_rows:
+                d_id, port, proto, svc = pr
+                if d_id not in ports_by_device:
+                    ports_by_device[d_id] = []
+                ports_by_device[d_id].append({"port": port, "protocol": proto, "service": svc})
 
             # 2. Build Nodes
             for row in rows:
-                dev_id, ip, mac, name, dev_type, vendor, status, icon, parent_id = row
+                dev_id, ip, mac, name, dev_type, vendor, status, icon, parent_id, down_rate, up_rate, last_seen = row
                 
                 # Infer icon from type if not set
                 if not icon:
@@ -59,7 +102,12 @@ class TopologyService:
                     "ip": ip,
                     "mac": mac,
                     "icon": icon or "HelpCircle",
-                    "parent_id": parent_id
+                    "parent_id": parent_id,
+                    "down_rate": down_rate,
+                    "up_rate": up_rate,
+                    "last_seen": last_seen.isoformat() if last_seen else None,
+                    "block_count": block_counts.get(dev_id, 0),
+                    "open_ports": ports_by_device.get(dev_id, [])
                 }
 
             # 3. Build Edges
