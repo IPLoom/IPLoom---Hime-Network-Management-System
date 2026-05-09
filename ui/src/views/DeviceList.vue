@@ -266,10 +266,14 @@
                 </td>
                 <td class="px-2 py-2 text-right hidden md:table-cell" @click.stop>
                   <div class="flex items-center justify-end gap-1">
-                    <button v-if="!device.is_trusted" @click.stop="approveDevice(device)"
-                      class="p-1.5 text-red-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-all"
-                      v-tooltip="'Approve Device'">
-                      <ShieldCheck class="h-4 w-4" />
+                    <button v-if="!device.is_trusted" 
+                      @click.stop="approveDevice(device)"
+                      :disabled="approvingId === device.id"
+                      class="p-1.5 rounded-lg transition-all"
+                      :class="approvingId === device.id ? 'text-slate-400 bg-slate-100' : 'text-rose-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'"
+                      v-tooltip="approvingId === device.id ? 'Trusting...' : 'Trust this Device'">
+                      <Loader2 v-if="approvingId === device.id" class="h-4 w-4 animate-spin" />
+                      <ShieldCheck v-else class="h-4 w-4" />
                     </button>
                     <router-link :to="{ name: 'DeviceDetails', params: { id: device.id } }" class="btn-action !p-1.5"
                       v-tooltip="'View Device Details'">
@@ -413,6 +417,35 @@
       </div>
     </div>
 
+    <!-- Approve Confirmation Modal -->
+    <div v-if="deviceToApprove" class="fixed inset-0 z-50 overflow-y-auto" @click.self="deviceToApprove = null">
+      <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+        <div class="modal-container-sm !max-w-md">
+          <div class="flex flex-col items-center text-center">
+            <div class="h-16 w-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/10">
+              <ShieldCheck class="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <h3 class="text-xl font-black text-slate-900 dark:text-white mb-2">Trust this Device?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 max-w-[280px]">
+              You are about to mark <span class="font-bold text-slate-900 dark:text-white">{{ deviceToApprove.display_name || deviceToApprove.ip }}</span> as a trusted member of your network.
+            </p>
+            <div class="flex gap-3 w-full">
+              <button @click="deviceToApprove = null"
+                class="flex-1 px-5 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">
+                Cancel
+              </button>
+              <button @click="confirmApprove" :disabled="approvingId"
+                class="flex-1 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                <Loader2 v-if="approvingId" class="h-4 w-4 animate-spin" />
+                {{ approvingId ? 'Trusting...' : 'Trust Device' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Discovery Modal -->
     <DiscoveryModal :isOpen="isDiscoveryOpen" @close="isDiscoveryOpen = false" @onboarded="fetchDevices" />
   </div>
@@ -459,6 +492,8 @@ const sortOrder = ref('asc')
 const isScanning = ref(false)
 const isDiscoveryOpen = ref(false)
 const loading = ref(false)
+const approvingId = ref(null)
+const deviceToApprove = ref(null)
 const isEditModalOpen = ref(false)
 const deviceToEdit = ref(null)
 
@@ -604,13 +639,24 @@ const triggerScan = async () => {
   }
 }
 
-const approveDevice = async (device) => {
+const approveDevice = (device) => {
+  deviceToApprove.value = device
+}
+
+const confirmApprove = async () => {
+  if (!deviceToApprove.value) return
+  
+  const device = deviceToApprove.value
+  approvingId.value = device.id
   try {
     await api.patch(`/devices/${device.id}`, { is_trusted: true })
     await fetchDevices()
-    notifySuccess('Device approved successfully')
+    notifySuccess(`"${device.display_name || device.ip}" is now trusted`)
+    deviceToApprove.value = null
   } catch (e) {
     notifyError('Failed to approve device')
+  } finally {
+    approvingId.value = null
   }
 }
 
