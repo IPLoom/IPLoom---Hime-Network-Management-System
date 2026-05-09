@@ -6,6 +6,11 @@ import httpx
 import os
 import json
 import asyncio
+import sys
+import subprocess
+import re
+from datetime import datetime, timezone
+from app.core.db import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +21,6 @@ class DiscoveryService:
     async def _async_is_port_open(host, port, timeout=1.5):
         """Asynchronously check if a port is open with better reliability."""
         try:
-            # Using asyncio.to_thread with socket.create_connection is often more reliable on Windows
-            # for detecting port status than asyncio.open_connection in high-concurrency scenarios.
             def check():
                 try:
                     with socket.create_connection((host, port), timeout=timeout):
@@ -29,6 +32,139 @@ class DiscoveryService:
             return False
 
     @staticmethod
+    async def rapid_scan_v2():
+        """
+        Ultra-fast network scanner that identifies NEW devices vs known ones.
+        1. Detects subnet.
+        2. Performs high-speed ping sweep.
+        3. Cross-references with DB.
+        4. Returns enriched list.
+        """
+        logger.info("Starting Rapid Discovery Scan v2...")
+        
+        # 1. Detect Subnet
+        interfaces = psutil.net_if_addrs()
+        target_network = None
+        for iface, addrs in interfaces.items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                    ip = addr.address
+                    mask = addr.netmask
+                    if ip and mask:
+                        if ip.startswith(("192.168.", "10.", "172.16.", "172.31.")):
+                            target_network = ipaddress.IPv4Network(f"{ip}/{mask}", strict=False)
+                            break
+            if target_network: break
+        
+        if not target_network:
+            target_network = ipaddress.IPv4Network("192.168.1.0/24")
+
+        ips = [str(h) for h in target_network.hosts()]
+        logger.info(f"Scanning {len(ips)} IPs in {target_network}")
+
+        # 2. Fetch Known Devices
+        def get_known():
+            conn = get_connection()
+            try:
+                rows = conn.execute("SELECT mac, ip, display_name FROM devices").fetchall()
+                return {r[0]: {"ip": r[1], "name": r[2]} for r in rows if r[0]}
+            finally:
+                conn.close()
+        
+        known_devices = await asyncio.to_thread(get_known)
+
+        # 3. High-Speed Ping Sweep
+        semaphore = asyncio.Semaphore(100)
+        async def ping_ip(ip):
+            async with semaphore:
+                try:
+                    cmd = ["ping", "-n", "1", "-w", "500", ip] if sys.platform == "win32" else ["ping", "-c", "1", "-W", "1", ip]
+                    proc = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    await proc.wait()
+                    if proc.returncode == 0:
+                        # Found someone! Get MAC
+                        mac = await DiscoveryService._get_mac(ip)
+                        return {"ip": ip, "mac": mac}
+                except:
+                    pass
+                return None
+
+        results = await asyncio.gather(*(ping_ip(ip) for ip in ips))
+        found = [r for r in results if r]
+        
+        # 4. Enrichment & Classification
+        enriched = []
+        for dev in found:
+            ip = dev["ip"]
+            mac = dev["mac"]
+            
+            status = "NEW"
+            known_info = known_devices.get(mac)
+            
+            if known_info:
+                if known_info["ip"] == ip:
+                    status = "KNOWN"
+                else:
+                    status = "MOVED"
+            
+            # Basic Hostname resolve
+            hostname = "unknown"
+            try:
+                def resolve():
+                    try: return socket.gethostbyaddr(ip)[0]
+                    except: return "unknown"
+                hostname = await asyncio.to_thread(resolve)
+            except: pass
+
+            enriched.append({
+                "ip": ip,
+                "mac": mac,
+                "hostname": hostname if hostname != "unknown" else (known_info["name"] if known_info else "unknown"),
+                "status": status,
+                "is_new": status == "NEW",
+                "vendor": await DiscoveryService._get_vendor(mac)
+            })
+
+        logger.info(f"Rapid Scan complete. Found {len(enriched)} devices.")
+        return sorted(enriched, key=lambda x: (x["status"] != "NEW", x["ip"]))
+
+    @staticmethod
+    async def _get_mac(ip):
+        """Helper to get MAC from ARP cache."""
+        try:
+            def sync_arp():
+                try:
+                    cmd = ["arp", "-a", ip]
+                    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=2).decode()
+                    match = re.search(r"(([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2}))", output)
+                    if match:
+                        return match.group(1).replace('-', ':').lower()
+                except: pass
+                return "unknown"
+            return await asyncio.to_thread(sync_arp)
+        except:
+            return "unknown"
+
+    @staticmethod
+    async def _get_vendor(mac):
+        """Simple vendor lookup from prefix."""
+        if not mac or mac == "unknown": return "Unknown"
+        prefix = mac.replace(':', '').upper()[:6]
+        # Very limited list for rapid scan fallback
+        COMMON_OUIS = {
+            "000C29": "VMware",
+            "005056": "VMware",
+            "B827EB": "Raspberry Pi",
+            "DC2632": "Raspberry Pi",
+            "E45F01": "Raspberry Pi",
+            "001788": "Philips Hue",
+            "ACCF23": "Hi-Flying",
+            "D83B0E": "Apple",
+            "C0FFEE": "Custom Device"
+        }
+        return COMMON_OUIS.get(prefix, "Network Device")
+
+    @staticmethod
     async def _async_verify_http(url, service_type, timeout=3.0):
         """Asynchronously verify service type using deep fingerprinting and heuristics."""
         try:
@@ -38,20 +174,15 @@ class DiscoveryService:
                 body_lower = body.lower()
                 
                 if service_type == "adguard":
-                    # Definitive AdGuard Signatures
                     signatures = ["adguard", "ag_home", "dns protection", "dns server", "dashboard"]
                     for sig in signatures:
                         if sig in body_lower:
                             return True
-                    
-                    # Port 3000 Heuristic: If it's port 3000 and it's a web page, it's almost certainly AdGuard
                     if ":3000" in url and resp.status_code == 200:
                         return True
-                    
                 elif service_type == "luci":
                     if "luci" in body_lower or "cgi-bin/luci" in body_lower:
                         return True
-
                 return False
         except:
             return False

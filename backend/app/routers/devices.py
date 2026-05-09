@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import List, Annotated, Optional, Dict, Any
 from app.core.db import get_connection
 from app.models.devices import DeviceRead, DeviceUpdate, PaginatedDevicesResponse
 from app.services.devices import update_device_fields
+from app.core.auth import get_current_user
 import json, asyncio, math
 
 router = APIRouter()
@@ -285,3 +286,27 @@ async def delete_device(device_id: str):
         await asyncio.to_thread(sync_delete)
         return {"status": "success", "message": f"Device {device_id} deleted"}
     except HTTPException as e: raise e
+
+@router.post("/onboard")
+async def onboard_discovered_device(data: Dict[str, Any], current_user: Any = Depends(get_current_user)):
+    """
+    Onboard a newly discovered device. 
+    Triggers an immediate deep scan.
+    """
+    ip = data.get("ip")
+    mac = data.get("mac")
+    hostname = data.get("hostname")
+    
+    if not ip or not mac:
+        raise HTTPException(status_code=400, detail="IP and MAC are required")
+    
+    from app.services.devices import upsert_device_from_scan
+    from app.services.scans import scan_device
+    
+    # 1. Immediate simple upsert
+    device_id = await upsert_device_from_scan(ip, mac, hostname, [])
+    
+    # 2. Trigger deep scan in background
+    asyncio.create_task(scan_device(device_id, ip))
+    
+    return {"status": "success", "device_id": device_id}

@@ -71,11 +71,15 @@ from app.routers.auth import router as auth_router
 from app.core.auth import get_current_user
 from fastapi import Depends
 
+from app.routers.topology import router as topology_router
+from app.routers.discovery import router as discovery_router
+
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(config_public_router, prefix="/api/v1/config", tags=["config"])
 app.include_router(config_router, prefix="/api/v1/config", tags=["config"], dependencies=[Depends(get_current_user)])
 app.include_router(scans_router, prefix="/api/v1/scans", tags=["scans"], dependencies=[Depends(get_current_user)])
 app.include_router(devices_router, prefix="/api/v1/devices", tags=["devices"], dependencies=[Depends(get_current_user)])
+app.include_router(discovery_router, prefix="/api/v1/discovery", tags=["discovery"], dependencies=[Depends(get_current_user)])
 app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=[Depends(get_current_user)])
 app.include_router(ssh_router, prefix="/api/v1/ssh", tags=["ssh"], dependencies=[Depends(get_current_user)])
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=[Depends(get_current_user)])

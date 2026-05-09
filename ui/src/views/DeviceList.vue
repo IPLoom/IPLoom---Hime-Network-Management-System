@@ -23,6 +23,14 @@
           </button>
         </div>
         <input type="file" ref="importInput" class="hidden" @change="handleImport" accept=".json" />
+        
+        <button @click="isDiscoveryOpen = true" 
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
+          v-tooltip="'Quick Scan for New Devices'">
+          <Radar class="w-4 h-4" />
+          Find New
+        </button>
+
         <button @click="triggerScan" :disabled="isScanning" class="btn-action"
           v-tooltip="isScanning ? 'Scanning Network...' : 'Scan Network'">
           <component :is="isScanning ? Loader2 : RefreshCw" class="w-5 h-5" :class="{ 'animate-spin': isScanning }" />
@@ -404,6 +412,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Discovery Modal -->
+    <DiscoveryModal :isOpen="isDiscoveryOpen" @close="isDiscoveryOpen = false" @onboarded="fetchDevices" />
   </div>
 </template>
 
@@ -413,9 +424,10 @@ import api from '@/utils/api'
 import Sparkline from '@/components/Sparkline.vue'
 import TrafficSparkline from '@/components/TrafficSparkline.vue'
 import EditDeviceModal from '@/components/EditDeviceModal.vue'
+import DiscoveryModal from '@/components/DiscoveryModal.vue'
 import { getIcon } from '@/utils/icons'
 import * as LucideIcons from 'lucide-vue-next'
-const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert } = LucideIcons
+const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar } = LucideIcons
 import { formatRelativeTime } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
 
@@ -445,6 +457,7 @@ const sortBy = ref('ip')
 const sortOrder = ref('asc')
 
 const isScanning = ref(false)
+const isDiscoveryOpen = ref(false)
 const loading = ref(false)
 const isEditModalOpen = ref(false)
 const deviceToEdit = ref(null)
