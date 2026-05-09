@@ -11,7 +11,7 @@
                             <MenuIcon class="h-6 w-6" />
                         </button>
                     </div>
-                    <AppLogo class="scale-90 origin-left" />
+                    <AppLogo class="scale-100 origin-left" />
                     <!-- Vertical Divider for Desktop -->
                     <div class="hidden md:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
                 </div>

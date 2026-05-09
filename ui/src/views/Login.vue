@@ -8,7 +8,7 @@
       
       <!-- Content Container -->
       <div class="relative z-10 max-w-sm text-center">
-        <AppLogo size="3xl" class="justify-center mb-16 mix-blend-multiply" />
+        <AppLogo size="xl" class="justify-center mb-12 drop-shadow-xl" />
         <p class="text-lg text-slate-500 font-medium leading-relaxed mt-3">
           The next generation of home network intelligence and security.
         </p>
@@ -39,7 +39,7 @@
       <div class="w-full max-w-[340px] relative z-10">
         <!-- Logo for Mobile -->
         <div class="lg:hidden flex justify-center mb-6">
-           <AppLogo size="3xl" class="mix-blend-multiply" />
+           <AppLogo size="xl" class="drop-shadow-lg" />
         </div>
 
         <div class="bg-white/80 backdrop-blur-3xl border border-slate-200 rounded-[1.5rem] shadow-2xl shadow-slate-200/50 p-6 relative group">
