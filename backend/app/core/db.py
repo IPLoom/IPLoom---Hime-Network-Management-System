@@ -29,9 +29,10 @@ def get_connection() -> duckdb.DuckDBPyConnection:
             # Open the master connection for the process
             _shared_conn = duckdb.connect(str(db_path))
             
-            # Optimize DuckDB for concurrency
+            # Optimize DuckDB for concurrency and consistency
             _shared_conn.execute("SET threads TO 4")
             _shared_conn.execute("SET memory_limit = '512MB'")
+            _shared_conn.execute("SET TimeZone='UTC'")
         
         # Return a cursor based on the master connection
         return _shared_conn.cursor()

@@ -28,11 +28,23 @@ export const formatDate = (timestamp) => {
 export const formatRelativeTime = (timestamp) => {
     if (!timestamp) return 'Never'
     try {
-        const dt = DateTime.fromISO(timestamp, { zone: 'utc' })
+        let dt = DateTime.fromISO(timestamp, { zone: 'utc' })
         if (!dt.isValid) {
-            const dt2 = DateTime.fromSQL(timestamp, { zone: 'utc' })
-            return dt2.isValid ? dt2.toLocal().toRelative() : 'Never'
+            dt = DateTime.fromSQL(timestamp, { zone: 'utc' })
         }
+        
+        if (!dt.isValid) return 'Never'
+        
+        // Safety for future dates due to clock drift or timezone issues
+        const now = DateTime.now().toUTC()
+        if (dt > now) {
+            // If it's less than 24 hours in the future, just say 'Just now'
+            // This masks timezone mismatch issues while we wait for UTC data to populate
+            if (dt.diff(now, 'hours').hours < 24) {
+                return 'Just now'
+            }
+        }
+        
         return dt.toLocal().toRelative()
     } catch {
         return 'Never'
