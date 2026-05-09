@@ -7,8 +7,16 @@ from typing import Any
 from app.services.mqtt import MQTTManager
 import logging
 
+from app.services.discovery import DiscoveryService
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
+public_router = APIRouter()
+
+@public_router.get("/discover")
+async def discover_network():
+    """Attempt to auto-detect local network configuration and services (cached)."""
+    return await DiscoveryService.get_cached_discovery()
 
 @router.get("/", response_model=list[ConfigItem])
 async def list_config():
