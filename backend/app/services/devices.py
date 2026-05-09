@@ -224,33 +224,71 @@ async def enrich_device(device_id: str, mac: str):
         from app.utilities.mac_lookup import get_vendor_from_api
         vendor = await get_vendor_from_api(mac)
 
+    # Fetch IP for fingerprinting
+    def get_ip():
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT ip FROM devices WHERE id = ?", [device_id]).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+    
+    ip = await asyncio.to_thread(get_ip)
+    if not ip: return
+
     if vendor:
+        # 1. Run HTTP Fingerprinting (New Modular Service)
+        from app.services.fingerprinting import FingerprintService
+        fingerprint = await FingerprintService.fingerprint_device(ip)
+
         def sync_update():
             conn = get_connection()
             try:
                 row = conn.execute("SELECT display_name, device_type, icon, attributes FROM devices WHERE id = ?", [device_id]).fetchone()
                 if row:
                     display_name, current_type, current_icon, old_attrs_json = row
-                    new_type, new_icon = current_type, current_icon
-                    if not current_type or current_type == "unknown":
-                        new_type, new_icon = classify_device(None, vendor)
                     
+                    new_type, new_icon = current_type, current_icon
                     new_display = display_name
-                    if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
-                         new_display = vendor
-
+                    
                     try:
                         attrs = json.loads(old_attrs_json) if old_attrs_json else {}
                     except:
                         attrs = {}
                     attrs["vendor"] = vendor
 
+                    if fingerprint:
+                        # Fingerprint is the highest source of truth for IoT devices,
+                        # but we still only update if the user hasn't set a custom name/type.
+                        
+                        # Only update type/icon if they are unknown or default
+                        if not current_type or current_type == "unknown":
+                            new_type = fingerprint["type"]
+                        if not current_icon or current_icon == "help-circle":
+                            new_icon = fingerprint["icon"]
+                        
+                        # Only update name if it's currently an IP or empty
+                        if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
+                            new_display = fingerprint["name"]
+                            
+                        attrs["fingerprint_id"] = fingerprint["id"]
+                        attrs["web_interface"] = fingerprint["url"]
+                        if fingerprint.get("detected_title"):
+                            attrs["web_title"] = fingerprint["detected_title"]
+                    else:
+                        # Fallback to vendor-based classification
+                        if not current_type or current_type == "unknown":
+                            new_type, new_icon = classify_device(None, vendor)
+                        
+                        if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
+                             new_display = vendor
+
                     conn.execute(
                         """
                         UPDATE devices 
                         SET vendor = COALESCE(vendor, ?),
-                            device_type = CASE WHEN device_type = 'unknown' OR device_type IS NULL THEN ? ELSE device_type END,
-                            icon = CASE WHEN icon = 'help-circle' OR icon IS NULL THEN ? ELSE icon END,
+                            device_type = ?,
+                            icon = ?,
                             display_name = ?,
                             attributes = ?
                         WHERE id = ?
