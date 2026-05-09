@@ -368,9 +368,9 @@ const finishOnboarding = async () => {
     // Save MQTT Config if not skipped
     if (!skippedSteps.value['mqtt']) {
       await api.post('/config/', {
-        mqtt_host: mqtt.value.host,
+        mqtt_broker: mqtt.value.host,
         mqtt_port: String(mqtt.value.port),
-        mqtt_user: mqtt.value.user,
+        mqtt_username: mqtt.value.user,
         mqtt_password: mqtt.value.pass
       })
     }
