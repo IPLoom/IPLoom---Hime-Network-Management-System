@@ -10,3 +10,4 @@ scans_output.json
 __pycache__/
 *.pyc
 backend/mqtt_debug.log
+iploom_deploy.tar.gz

@@ -7,7 +7,7 @@ fi
 
 # Default settings
 HOST=${HOST:-0.0.0.0}
-PORT=${PORT:-8001}
+PORT=${PORT:-8000}
 WORKERS=${WORKERS:-1}
 APP_MODULE=${APP_MODULE:-"app.main:app"}
 
