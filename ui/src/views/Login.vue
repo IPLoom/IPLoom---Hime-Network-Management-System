@@ -3,12 +3,12 @@
     <!-- Left Column: Branding & Visuals (Hidden on small screens) -->
     <div class="hidden lg:flex lg:w-1/2 relative flex-col justify-center items-center p-8 border-r border-slate-200 bg-white">
       <!-- Background Effects -->
-      <div class="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-blue-600/5 rounded-full blur-[120px] animate-pulse"></div>
-      <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/5 rounded-full blur-[120px] animate-pulse animation-delay-2000"></div>
+      <div class="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-blue-600/5 rounded-full blur-[80px] animate-pulse"></div>
+      <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/5 rounded-full blur-[80px] animate-pulse animation-delay-2000"></div>
       
       <!-- Content Container -->
       <div class="relative z-10 max-w-sm text-center">
-        <AppLogo class="justify-center mb-6 scale-[1.2]" />
+        <AppLogo size="3xl" class="justify-center mb-16 mix-blend-multiply" />
         <p class="text-lg text-slate-500 font-medium leading-relaxed mt-3">
           The next generation of home network intelligence and security.
         </p>
@@ -39,7 +39,7 @@
       <div class="w-full max-w-[340px] relative z-10">
         <!-- Logo for Mobile -->
         <div class="lg:hidden flex justify-center mb-6">
-           <AppLogo />
+           <AppLogo size="3xl" class="mix-blend-multiply" />
         </div>
 
         <div class="bg-white/80 backdrop-blur-3xl border border-slate-200 rounded-[1.5rem] shadow-2xl shadow-slate-200/50 p-6 relative group">
@@ -55,7 +55,16 @@
             </p>
           </div>
 
-          <form @submit.prevent="handleSubmit" class="space-y-3">
+          <!-- Initial Loading State -->
+          <div v-if="!authStore.initialized" class="py-12 flex flex-col items-center justify-center space-y-4">
+            <div class="relative w-12 h-12">
+              <div class="absolute inset-0 border-4 border-blue-600/10 rounded-full"></div>
+              <div class="absolute inset-0 border-4 border-t-blue-600 rounded-full animate-spin"></div>
+            </div>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Initializing System</p>
+          </div>
+
+          <form v-else @submit.prevent="handleSubmit" class="space-y-3">
             <div v-if="authStore.error || localError" class="p-2.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] flex items-center gap-2.5 animate-shake font-bold">
                <ShieldAlert class="h-3.5 w-3.5" />
                <span>{{ authStore.error || localError }}</span>
@@ -232,7 +241,9 @@ watch(form, () => {
 }, { deep: true })
 
 onMounted(async () => {
-  await authStore.checkSetupStatus()
+  if (!authStore.initialized) {
+    await authStore.checkSetupStatus()
+  }
   if (authStore.isAuthenticated) {
     router.push('/')
   }

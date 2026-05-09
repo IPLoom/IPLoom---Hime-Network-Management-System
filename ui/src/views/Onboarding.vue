@@ -3,10 +3,8 @@
     <!-- Header -->
     <header class="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+        <div class="w-9 h-9 rounded-xl overflow-hidden shadow-lg shadow-blue-600/20 bg-white p-1">
+          <img src="/brand/icon.png" alt="IPLoom" class="w-full h-full object-contain" />
         </div>
         <h1 class="text-lg font-bold tracking-tight text-slate-900">IPLoom <span class="text-blue-600">Onboarding</span></h1>
       </div>
@@ -27,10 +25,8 @@
         <!-- Step 1: Subnet (Required) -->
         <div v-if="currentStep === 1" class="animate-in">
           <div class="flex items-center gap-4 mb-8">
-            <div class="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+            <div class="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center overflow-hidden p-2">
+              <img src="/brand/icon.png" alt="Discovery" class="w-full h-full object-contain" />
             </div>
             <div>
               <h2 class="text-xl font-bold text-slate-900">Network Discovery</h2>
@@ -69,10 +65,8 @@
         <div v-if="currentStep === 2" class="animate-in">
           <div class="flex items-center justify-between mb-8">
             <div class="flex items-center gap-4">
-              <div class="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                </svg>
+              <div class="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center overflow-hidden p-2">
+                <img src="/brand/openwrt.png" alt="OpenWrt" class="w-full h-full object-contain" />
               </div>
               <div>
                 <h2 class="text-xl font-bold text-slate-900">Router Integration</h2>
@@ -115,10 +109,8 @@
         <div v-if="currentStep === 3" class="animate-in">
           <div class="flex items-center justify-between mb-8">
             <div class="flex items-center gap-4">
-              <div class="w-11 h-11 rounded-2xl bg-green-50 flex items-center justify-center text-green-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
+              <div class="w-11 h-11 rounded-2xl bg-green-50 flex items-center justify-center overflow-hidden p-2">
+                <img src="/brand/adguard.png" alt="AdGuard" class="w-full h-full object-contain" />
               </div>
               <div>
                 <h2 class="text-xl font-bold text-slate-900">AdGuard Home</h2>
@@ -155,10 +147,8 @@
         <div v-if="currentStep === 4" class="animate-in">
           <div class="flex items-center justify-between mb-8">
             <div class="flex items-center gap-4">
-              <div class="w-11 h-11 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
+              <div class="w-11 h-11 rounded-2xl bg-orange-50 flex items-center justify-center overflow-hidden p-2">
+                <img src="/brand/mqtt.png" alt="MQTT" class="w-full h-full object-contain" />
               </div>
               <div>
                 <h2 class="text-xl font-bold text-slate-900">MQTT Broker</h2>
@@ -201,10 +191,8 @@
 
         <!-- Step 5: Welcome / Summary -->
         <div v-if="currentStep === 5" class="animate-in text-center py-4">
-          <div class="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-6">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-            </svg>
+          <div class="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-6 overflow-hidden p-4 shadow-inner">
+            <img src="/brand/icon.png" alt="Ready" class="w-full h-full object-contain" />
           </div>
           <h2 class="text-2xl font-bold text-slate-900 mb-2">Ready to Launch!</h2>
           <p class="text-slate-500 text-[14px] mb-10">Review your configuration before we finalize everything.</p>

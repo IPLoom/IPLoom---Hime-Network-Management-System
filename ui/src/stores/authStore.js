@@ -13,6 +13,8 @@ export const useAuthStore = defineStore('auth', {
       setup_completed: false,
       user_exists: false
     },
+    initialized: false,
+    statusLoading: false,
     loading: false,
     error: null
   }),
@@ -24,12 +26,17 @@ export const useAuthStore = defineStore('auth', {
 
   actions: {
     async checkSetupStatus() {
+      if (this.statusLoading) return
+      this.statusLoading = true
       try {
         const res = await axios.get(`${API_BASE}/auth/setup-status`)
         this.setupStatus = res.data
+        this.initialized = true
         return res.data
       } catch (err) {
         console.error('Failed to check setup status', err)
+      } finally {
+        this.statusLoading = false
       }
     },
 
