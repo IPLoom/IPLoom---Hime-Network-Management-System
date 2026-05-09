@@ -28,9 +28,13 @@ def setup_logging():
     """
     Configures the root logger to write JSON logs to a rotating file using a safe 5MB limit.
     """
-    log_dir = "data"
+    from app.core.config import get_settings
+    settings = get_settings()
+    from pathlib import Path
+    log_dir = str(Path(settings.db_path).parent)
+    
     if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
         
     log_file = os.path.join(log_dir, "system.jsonl")
     

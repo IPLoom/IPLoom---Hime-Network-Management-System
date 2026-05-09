@@ -12,12 +12,12 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "False"
-      DB_PATH: /data/network_scanner.duckdb
+      DB_PATH: /data/final_scanner.duckdb
       DB_SCHEMA_PATH: app/schema.sql
       DB_INIT_MODE: create
       WORKERS: "1"
     volumes:
-      - scanner-data:/data
+      - ./data:/data
     deploy:
       resources:
         limits:
@@ -38,5 +38,6 @@ services:
       - "9001:9001"
     restart: always
 
-volumes:
-  scanner-data:
+# No named volumes needed for simple bind mounts
+# volumes:
+#   scanner-data:

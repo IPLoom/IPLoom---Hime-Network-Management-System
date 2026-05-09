@@ -249,6 +249,19 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
         )
     """)
 
+    # 6. Ensure users table exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            hashed_password TEXT NOT NULL,
+            full_name TEXT,
+            region TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     commit()
 
 def seed_classification_rules(conn: duckdb.DuckDBPyConnection) -> None:

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 import asyncio
 import logging
 from app.core.db import init_db
-from app.routers.config import router as config_router
+from app.routers.config import router as config_router, public_router as config_public_router
 from app.routers.scans import router as scans_router
 from app.routers.devices import router as devices_router
 from app.routers.schedules import router as schedules_router
@@ -62,33 +62,42 @@ async def on_startup():
     
     asyncio.create_task(scheduler_loop())
     asyncio.create_task(scan_runner_loop())
+
+    # Run network discovery and cache results for onboarding
+    from app.services.discovery import DiscoveryService
+    asyncio.create_task(DiscoveryService.run_and_cache())
     
-app.include_router(config_router, prefix="/api/v1/config", tags=["config"])
-app.include_router(scans_router, prefix="/api/v1/scans", tags=["scans"])
-app.include_router(devices_router, prefix="/api/v1/devices", tags=["devices"])
-app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"])
-app.include_router(ssh_router, prefix="/api/v1/ssh", tags=["ssh"])
-app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
-app.include_router(mqtt_router, prefix="/api/v1/mqtt", tags=["mqtt"])
-app.include_router(classification_router, prefix="/api/v1/classification", tags=["classification"])
+from app.routers.auth import router as auth_router
+from app.core.auth import get_current_user
+from fastapi import Depends
 
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(config_public_router, prefix="/api/v1/config", tags=["config"])
+app.include_router(config_router, prefix="/api/v1/config", tags=["config"], dependencies=[Depends(get_current_user)])
+app.include_router(scans_router, prefix="/api/v1/scans", tags=["scans"], dependencies=[Depends(get_current_user)])
+app.include_router(devices_router, prefix="/api/v1/devices", tags=["devices"], dependencies=[Depends(get_current_user)])
+app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=[Depends(get_current_user)])
+app.include_router(ssh_router, prefix="/api/v1/ssh", tags=["ssh"], dependencies=[Depends(get_current_user)])
+app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=[Depends(get_current_user)])
+app.include_router(mqtt_router, prefix="/api/v1/mqtt", tags=["mqtt"], dependencies=[Depends(get_current_user)])
+app.include_router(classification_router, prefix="/api/v1/classification", tags=["classification"], dependencies=[Depends(get_current_user)])
 
-app.include_router(openwrt_router, prefix="/api/v1/integrations/openwrt", tags=["openwrt"])
+app.include_router(openwrt_router, prefix="/api/v1/integrations/openwrt", tags=["openwrt"], dependencies=[Depends(get_current_user)])
 
 from app.routers.adguard import router as adguard_router
-app.include_router(adguard_router, prefix="/api/v1/integrations/adguard", tags=["adguard"])
+app.include_router(adguard_router, prefix="/api/v1/integrations/adguard", tags=["adguard"], dependencies=[Depends(get_current_user)])
 
-app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytics"], dependencies=[Depends(get_current_user)])
 
 from app.routers.logs import router as logs_router
-app.include_router(logs_router, prefix="/api/v1/logs", tags=["logs"])
+app.include_router(logs_router, prefix="/api/v1/logs", tags=["logs"], dependencies=[Depends(get_current_user)])
 
 from app.routers.task_events import router as task_events_router
-app.include_router(task_events_router, prefix="/api/v1/task-events", tags=["task-events"])
+app.include_router(task_events_router, prefix="/api/v1/task-events", tags=["task-events"], dependencies=[Depends(get_current_user)])
 
 from app.routers.topology import router as topology_router
-app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"])
-app.include_router(system_router, prefix="/api/v1/system", tags=["system"])
+app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"], dependencies=[Depends(get_current_user)])
+app.include_router(system_router, prefix="/api/v1/system", tags=["system"], dependencies=[Depends(get_current_user)])
 
 
 

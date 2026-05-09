@@ -5,10 +5,15 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import traceback
 
-# Ensure data directory exists
-os.makedirs("data", exist_ok=True)
+def get_log_path():
+    from app.core.config import get_settings
+    from pathlib import Path
+    settings = get_settings()
+    data_dir = Path(settings.db_path).parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir / "tasks.jsonl")
 
-LOG_FILE = "data/tasks.jsonl"
+LOG_FILE = get_log_path()
 
 class JsonFormatter(logging.Formatter):
     """

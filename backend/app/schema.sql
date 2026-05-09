@@ -1,8 +1,18 @@
--- config
 CREATE TABLE IF NOT EXISTS config (
     key         TEXT PRIMARY KEY,
     value       TEXT,
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- users
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    hashed_password TEXT NOT NULL,
+    full_name TEXT,
+    region TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- scans
