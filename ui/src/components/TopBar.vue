@@ -173,6 +173,47 @@
                             </div>
                         </transition>
                     </div>
+
+                    <!-- User Profile Dropdown -->
+                    <div class="relative ml-1" v-click-outside="() => showUserMenu = false">
+                        <button @click="showUserMenu = !showUserMenu"
+                            class="flex items-center gap-2 p-1 pl-1 pr-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                {{ authStore.user?.username?.charAt(0).toUpperCase() || 'U' }}
+                            </div>
+                            <span class="hidden sm:block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                {{ authStore.user?.username || 'User' }}
+                            </span>
+                            <ChevronDownIcon class="h-3 w-3 text-slate-400 transition-transform duration-200" :class="showUserMenu ? 'rotate-180' : ''" />
+                        </button>
+
+                        <!-- User Menu Dropdown -->
+                        <transition enter-active-class="transition duration-200 ease-out"
+                            enter-from-class="transform scale-95 opacity-0"
+                            enter-to-class="transform scale-100 opacity-100"
+                            leave-active-class="transition duration-150 ease-in"
+                            leave-from-class="transform scale-100 opacity-100"
+                            leave-to-class="transform scale-95 opacity-0">
+                            <div v-if="showUserMenu"
+                                class="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                                <div class="px-4 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
+                                    <p class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ authStore.user?.full_name || authStore.user?.username }}</p>
+                                    <p class="text-[10px] text-slate-500 truncate mt-0.5">{{ authStore.user?.region ? 'Region: ' + authStore.user.region : 'Administrator' }}</p>
+                                </div>
+                                
+                                <div class="py-1">
+                                    <router-link to="/settings" @click="showUserMenu = false" class="user-menu-item">
+                                        <UserIcon class="h-4 w-4" />
+                                        <span>Profile Settings</span>
+                                    </router-link>
+                                    <button @click="handleLogout" class="user-menu-item text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 w-full text-left">
+                                        <LogOutIcon class="h-4 w-4" />
+                                        <span>Sign Out</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
                 </div>
             </div>
         </div>
@@ -195,15 +236,17 @@ import {
     Server,
     Router,
     Network,
-    Tv,
-    Printer,
     Wifi,
-    WifiOff
+    WifiOff,
+    User as UserIcon,
+    LogOut as LogOutIcon,
+    ChevronDown as ChevronDownIcon
 } from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppLogo from './AppLogo.vue'
 import { useSearchStore } from '@/stores/search'
 import { useNotificationStore } from '@/stores/notifications'
+import { useAuthStore } from '@/stores/authStore'
 import { useRouter } from 'vue-router'
 import { formatRelativeTime } from '@/utils/date'
 
@@ -211,9 +254,11 @@ defineEmits(['toggle-mobile-menu'])
 
 const searchStore = useSearchStore()
 const notificationStore = useNotificationStore()
+const authStore = useAuthStore()
 const router = useRouter()
 const showResults = ref(false)
 const showNotifications = ref(false)
+const showUserMenu = ref(false)
 
 let notificationTimer = null
 
@@ -233,7 +278,13 @@ const toggleNotifications = () => {
     showNotifications.value = !showNotifications.value
     if (showNotifications.value) {
         showResults.value = false
+        showUserMenu.value = false
     }
+}
+
+const handleLogout = () => {
+    authStore.logout()
+    router.push('/login')
 }
 
 const markAllAsRead = () => {

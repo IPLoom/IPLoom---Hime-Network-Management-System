@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-4">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -223,18 +223,18 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-3 py-4 hidden md:table-cell">
+                <td class="px-2 py-2 hidden md:table-cell">
                   <div class="text-xs text-slate-600 dark:text-slate-300 font-medium">{{ device.vendor || 'Unknown' }}
                   </div>
                   <div class="text-xs text-slate-500 font-mono truncate max-w-[200px]">{{ device.mac || 'N/A' }}</div>
                 </td>
-                <td class="px-3 py-4 hidden md:table-cell">
+                <td class="px-2 py-2 hidden md:table-cell">
                   <div class="h-8 w-24 relative" v-if="device.traffic_history && device.traffic_history.length > 1">
                     <TrafficSparkline :data="device.traffic_history" :width="100" :height="32" />
                   </div>
                   <span v-else class="text-[10px] text-slate-400 italic">No Activity</span>
                 </td>
-                <td class="px-3 py-4 hidden md:table-cell">
+                <td class="px-2 py-2 hidden md:table-cell">
                   <div v-if="device.open_ports && device.open_ports.length > 0" class="flex flex-wrap gap-1">
                     <span v-for="port in device.open_ports.slice(0, 3)"
                       :key="typeof port === 'object' ? port.port : port"
@@ -247,7 +247,7 @@
                   </div>
                   <span v-else class="text-xs text-slate-400 italic">No ports</span>
                 </td>
-                <td class="px-3 py-4 hidden md:table-cell">
+                <td class="px-2 py-2 hidden md:table-cell">
                   <span
                     class="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                     {{ device.device_type || 'Unknown' }}
@@ -256,7 +256,7 @@
                 <td class="px-3 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">
                   {{ formatRelativeTime(device.last_seen) }}
                 </td>
-                <td class="px-3 py-4 text-right hidden md:table-cell" @click.stop>
+                <td class="px-2 py-2 text-right hidden md:table-cell" @click.stop>
                   <div class="flex items-center justify-end gap-1">
                     <button v-if="!device.is_trusted" @click.stop="approveDevice(device)"
                       class="p-1.5 text-red-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-all"

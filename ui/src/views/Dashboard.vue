@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-4">
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -112,7 +112,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Aggregate Traffic Chart -->
       <div
-        class="lg:col-span-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+        class="lg:col-span-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
         <div class="flex items-center justify-between mb-6">
           <div class="flex items-center gap-3">
             <div class="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
@@ -149,7 +149,7 @@
 
       <!-- Device Distribution -->
       <div
-        class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+        class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
         <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-1">Device Types</h2>
         <p class="text-xs text-slate-500 mb-6">Inventory by category</p>
 
@@ -174,7 +174,7 @@
 
     <!-- DNS Activity Row -->
     <div
-      class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+      class="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
           <div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">

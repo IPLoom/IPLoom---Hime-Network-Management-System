@@ -1,11 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/components/Layout.vue'
 import Dashboard from '@/views/Dashboard.vue'
+import { useAuthStore } from '@/stores/authStore'
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { public: true }
+  },
+  {
+    path: '/onboarding',
+    name: 'Onboarding',
+    component: () => import('@/views/Onboarding.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/',
     component: Layout,
+    meta: { requiresAuth: true },
     children: [
       {
         path: '',
@@ -64,6 +78,28 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+  
+  // Wait for setup status on first load
+  if (!authStore.setupStatus.checked) {
+    await authStore.checkSetupStatus()
+    authStore.setupStatus.checked = true
+  }
+
+  const isAuthenticated = authStore.isAuthenticated
+
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    next({ name: 'Login' })
+  } else if (isAuthenticated && authStore.setupStatus.needs_setup && to.name !== 'Onboarding') {
+    next({ name: 'Onboarding' })
+  } else if (to.name === 'Login' && isAuthenticated && !authStore.setupStatus.needs_setup) {
+    next({ name: 'Dashboard' })
+  } else {
+    next()
+  }
 })
 
 export default router
