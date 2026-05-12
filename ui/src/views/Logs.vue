@@ -3,276 +3,309 @@
         <!-- Header -->
         <div class="page-header">
             <div>
-                <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">System Logs</h1>
+                <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Logs & Activity</h1>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    View backend system events and monitoring. Found {{ displayTotal }} records.
+                    {{ currentTab === 'scans' ? 'Discovery activity log and network scans.' : 'View backend system events and monitoring.' }}
                 </p>
             </div>
-            <div class="flex items-center gap-3">
-                <!-- Tab Switcher -->
-                <div class="flex p-0.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-                    <button @click="currentTab = 'all'"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2"
-                        :class="currentTab === 'all' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
-                        <Activity class="w-3.5 h-3.5" />
-                        System Logs
-                    </button>
-                    <button @click="currentTab = 'tasks'"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2"
-                        :class="currentTab === 'tasks' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
-                        <Cog class="w-3.5 h-3.5" />
-                        Task Activity
-                    </button>
-                </div>
-                <button @click="fetchLogs" class="btn-action" v-tooltip="'Refresh Logs'">
-                    <RefreshCw class="w-5 h-5" :class="{ 'animate-spin': loading }" />
+            <!-- Tab Switcher (Standardized) -->
+            <div class="flex p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl h-11">
+                <button @click="currentTab = 'all'"
+                    class="px-5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
+                    :class="currentTab === 'all' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
+                    <Activity class="w-4 h-4" />
+                    System
                 </button>
-                <button @click.stop="promptClearLogs"
-                    class="btn-action hover:!text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"
-                    v-tooltip="'Clear All Logs'">
-                    <Trash2 class="w-5 h-5" />
+                <button @click="currentTab = 'tasks'"
+                    class="px-5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
+                    :class="currentTab === 'tasks' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
+                    <Cog class="w-4 h-4" />
+                    Tasks
+                </button>
+                <button @click="currentTab = 'scans'"
+                    class="px-5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
+                    :class="currentTab === 'scans' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
+                    <Radar class="w-4 h-4" />
+                    Scans
                 </button>
             </div>
         </div>
 
-        <!-- Filters & Search -->
-        <div class="glass-panel flex flex-col gap-4">
-            <div class="flex flex-col md:flex-row gap-4 items-center">
-                <div class="relative flex-1 w-full">
-                    <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input v-model="search" @input="debounceSearch" type="text" placeholder="Search logs..."
-                        class="input-base" />
+        <template v-if="currentTab === 'scans'">
+            <!-- Scan Specific Toolbar -->
+            <div class="glass-panel flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-2 text-slate-500 text-sm">
+                    <Activity class="w-4 h-4" />
+                    <span>Recent scans and discovery history</span>
                 </div>
-                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                    <!-- Task Type Filter (Visible only for Task Activity) -->
-                    <div v-if="currentTab === 'tasks'" class="relative flex-1 md:w-44 group"
-                        v-click-outside="() => isTaskTypeOpen = false">
-                        <button @click="isTaskTypeOpen = !isTaskTypeOpen"
-                            class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
-                            <div class="flex items-center gap-2.5">
-                                <Filter class="h-3.5 w-3.5"
-                                    :class="taskTypeFilter ? 'text-blue-500' : 'text-slate-400'" />
-                                <span>{{ getTaskLabel(taskTypeFilter) || 'All Types' }}</span>
-                            </div>
-                            <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
-                                :class="{ 'rotate-180': isTaskTypeOpen }" />
-                        </button>
-
-                        <transition enter-active-class="transition duration-100 ease-out"
-                            enter-from-class="transform scale-95 opacity-0"
-                            enter-to-class="transform scale-100 opacity-100"
-                            leave-active-class="transition duration-75 ease-in"
-                            leave-from-class="transform scale-100 opacity-100"
-                            leave-to-class="transform scale-95 opacity-0">
-                            <div v-if="isTaskTypeOpen"
-                                class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
-                                <button @click="taskTypeFilter = ''; isTaskTypeOpen = false; fetchLogs()"
-                                    class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
-                                    :class="taskTypeFilter === '' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
-                                    All Types
-                                </button>
-                                <button v-for="type in taskTypes" :key="type.value"
-                                    @click="taskTypeFilter = type.value; isTaskTypeOpen = false; fetchLogs()"
-                                    class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
-                                    :class="taskTypeFilter === type.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
-                                    <component :is="type.icon" class="w-3.5 h-3.5 opacity-70" />
-                                    {{ type.label }}
-                                </button>
-                            </div>
-                        </transition>
-                    </div>
-
-                    <!-- Level Filter (Visible only for System Logs) -->
-                    <div v-else class="relative flex-1 md:w-44 group" v-click-outside="() => isLevelOpen = false">
-                        <button @click="isLevelOpen = !isLevelOpen"
-                            class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
-                            <div class="flex items-center gap-2.5">
-                                <Filter class="h-3.5 w-3.5" :class="levelFilter ? 'text-blue-500' : 'text-slate-400'" />
-                                <span>{{ levelFilter || 'All Levels' }}</span>
-                            </div>
-                            <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
-                                :class="{ 'rotate-180': isLevelOpen }" />
-                        </button>
-
-                        <transition enter-active-class="transition duration-100 ease-out"
-                            enter-from-class="transform scale-95 opacity-0"
-                            enter-to-class="transform scale-100 opacity-100"
-                            leave-active-class="transition duration-75 ease-in"
-                            leave-from-class="transform scale-100 opacity-100"
-                            leave-to-class="transform scale-95 opacity-0">
-                            <div v-if="isLevelOpen"
-                                class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
-                                <button @click="levelFilter = ''; isLevelOpen = false; fetchLogs()"
-                                    class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
-                                    :class="levelFilter === '' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
-                                    All Levels
-                                </button>
-                                <button v-for="lvl in levels" :key="lvl"
-                                    @click="levelFilter = lvl; isLevelOpen = false; fetchLogs()"
-                                    class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
-                                    :class="levelFilter === lvl ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
-                                    {{ lvl }}
-                                </button>
-                            </div>
-                        </transition>
-                    </div>
-
-                    <!-- Rows Limit Filter -->
-                    <div class="relative flex-1 md:w-32 group" v-click-outside="() => isRowsOpen = false">
-                        <button @click="isRowsOpen = !isRowsOpen"
-                            class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
-                            <div class="flex items-center gap-2.5">
-                                <span class="text-[10px] uppercase font-bold text-slate-400">Rows</span>
-                                <span class="font-bold">{{ limit }}</span>
-                            </div>
-                            <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
-                                :class="{ 'rotate-180': isRowsOpen }" />
-                        </button>
-
-                        <transition enter-active-class="transition duration-100 ease-out"
-                            enter-from-class="transform scale-95 opacity-0"
-                            enter-to-class="transform scale-100 opacity-100"
-                            leave-active-class="transition duration-75 ease-in"
-                            leave-from-class="transform scale-100 opacity-100"
-                            leave-to-class="transform scale-95 opacity-0">
-                            <div v-if="isRowsOpen"
-                                class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
-                                <button v-for="opt in [20, 50, 100, 200]" :key="opt"
-                                    @click="limit = opt; isRowsOpen = false; fetchLogs()"
-                                    class="w-full px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
-                                    :class="limit === opt ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
-                                    {{ opt }}
-                                </button>
-                            </div>
-                        </transition>
-                    </div>
-                </div>
-            </div>
-            <!-- Display Info Line -->
-            <div
-                class="px-2 flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 <div class="flex items-center gap-2">
-                    <Activity class="h-3.5 w-3.5 text-blue-500" />
-                    <span>Showing <b>{{ displayedLogs.length }}</b> of <b>{{ displayTotal }}</b> logs matching current
-                        filters</span>
-                </div>
-                <div v-if="currentTab === 'tasks'" class="flex items-center gap-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" v-model="autoRefresh"
-                            class="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0">
-                        <span class="text-xs font-medium">Auto-refresh (5s)</span>
-                    </label>
+                    <button @click="scanTabRef?.runDiscovery()" :disabled="scanTabRef?.isScanning" class="h-10 px-6 flex items-center justify-center gap-2 bg-blue-500/10 text-blue-600 border border-blue-500/20 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap" v-tooltip="'Start Network Discovery'">
+                        <component :is="scanTabRef?.isScanning ? RefreshCw : Radar" class="w-4 h-4" :class="{ 'animate-spin': scanTabRef?.isScanning }" />
+                        Run Discovery
+                    </button>
+                    <button @click="scanTabRef?.clearQueue()" class="btn-action hover:!text-red-500 dark:hover:!text-red-400"
+                        v-tooltip="'Clear Scan Queue'">
+                        <Trash2 class="w-4 h-4" />
+                    </button>
+                    <button @click="scanTabRef?.fetchScans()" class="btn-action" v-tooltip="'Refresh Scan History'">
+                        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': scanTabRef?.isRefreshing }" />
+                    </button>
                 </div>
             </div>
-        </div>
-
-        <!-- Logs Table -->
-        <div class="content-panel">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                    <thead class="bg-slate-50 dark:bg-slate-900/50">
-                        <tr>
-                            <th scope="col" class="table-header-cell w-48">Timestamp</th>
-                            <th scope="col" class="table-header-cell w-24">
-                                {{ currentTab === 'tasks' ? 'Type' : 'Level' }}
-                            </th>
-                            <th scope="col" class="table-header-cell w-48">
-                                {{ currentTab === 'tasks' ? 'Target' : 'Module' }}
-                            </th>
-                            <th scope="col" class="table-header-cell">Message</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
-                        <tr v-if="loading && logs.length === 0">
-                            <td colspan="4" class="px-6 py-20 text-center">
-                                <RefreshCw class="h-8 w-8 mx-auto animate-spin mb-2 text-slate-400" />
-                                <p class="text-slate-500 dark:text-slate-400">Loading logs...</p>
-                            </td>
-                        </tr>
-                        <tr v-else-if="logs.length === 0">
-                            <td colspan="4" class="px-6 py-20 text-center">
-                                <p class="text-slate-500 dark:text-slate-400 italic">No logs found matching your
-                                    criteria.</p>
-                            </td>
-                        </tr>
-                        <tr v-for="(log, idx) in displayedLogs" :key="idx" class="hover-row">
-                            <td class="table-data-cell font-mono text-xs opacity-70">
-                                {{ formatTime(log.timestamp) }}
-                            </td>
-
-                            <!-- Task Type or Level -->
-                            <td class="table-data-cell">
-                                <span v-if="currentTab === 'tasks'" :class="[
-                                    'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider',
-                                    getTaskColor(log.task_type)
-                                ]">
-                                    <component :is="getTaskIcon(log.task_type)" class="w-3 h-3" />
-                                    {{ getTaskLabel(log.task_type) }}
-                                </span>
-                                <span v-else :class="[
-                                    'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider',
-                                    levelColors[log.level] || 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
-                                ]">
-                                    {{ log.level }}
-                                </span>
-                            </td>
-
-                            <!-- Target or Module -->
-                            <td class="table-data-cell font-mono text-xs opacity-70">
-                                <div v-if="currentTab === 'tasks'" class="flex flex-col">
-                                    <span class="font-bold text-slate-700 dark:text-slate-300">{{ log.target || '-'
-                                    }}</span>
-                                    <span v-if="log.event_type" class="text-[10px] uppercase tracking-wide"
-                                        :class="{ 'text-green-600': log.event_type === 'completed', 'text-blue-600': log.event_type === 'started', 'text-red-600': log.event_type === 'failed' }">
-                                        {{ log.event_type }}
-                                    </span>
+            <ScanHistoryTab ref="scanTabRef" />
+        </template>
+        <template v-else>
+            <!-- Filters & Search Toolbar -->
+            <div class="glass-panel flex flex-col gap-4">
+                <div class="flex flex-col md:flex-row gap-4 items-center">
+                    <div class="relative flex-1 w-full">
+                        <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input v-model="search" @input="debounceSearch" type="text" placeholder="Search logs..."
+                            class="input-base" />
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                        <!-- Task Type Filter -->
+                        <div v-if="currentTab === 'tasks'" class="relative flex-1 md:w-56 group"
+                            v-click-outside="() => isTaskTypeOpen = false">
+                            <button @click="isTaskTypeOpen = !isTaskTypeOpen"
+                                class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
+                                <div class="flex items-center gap-2.5">
+                                    <Filter class="h-3.5 w-3.5"
+                                        :class="taskTypeFilter ? 'text-blue-500' : 'text-slate-400'" />
+                                    <span>{{ getTaskLabel(taskTypeFilter) || 'All Types' }}</span>
                                 </div>
-                                <span v-else :title="log.path">{{ log.module }}:{{ log.line }}</span>
-                            </td>
+                                <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
+                                    :class="{ 'rotate-180': isTaskTypeOpen }" />
+                            </button>
 
-                            <!-- Message and Details -->
-                            <td class="table-data-cell font-mono text-sm break-all">
-                                {{ log.message }}
-
-                                <!-- Task Duration Badge -->
-                                <span v-if="log.duration_ms"
-                                    class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                    ⏱ {{ log.duration_ms }}ms
-                                </span>
-
-                                <!-- Task Details JSON -->
-                                <div v-if="log.details" class="mt-2 text-xs text-slate-500 font-mono">
-                                    <span v-for="(val, key) in log.details" :key="key" class="mr-3 inline-block">
-                                        <span class="opacity-70">{{ key }}:</span> <span class="font-medium">{{ val
-                                        }}</span>
-                                    </span>
+                            <transition enter-active-class="transition duration-100 ease-out"
+                                enter-from-class="transform scale-95 opacity-0"
+                                enter-to-class="transform scale-100 opacity-100"
+                                leave-active-class="transition duration-75 ease-in"
+                                leave-from-class="transform scale-100 opacity-100"
+                                leave-to-class="transform scale-95 opacity-0">
+                                <div v-if="isTaskTypeOpen"
+                                    class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
+                                    <button @click="taskTypeFilter = ''; isTaskTypeOpen = false; fetchLogs()"
+                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors whitespace-nowrap"
+                                        :class="taskTypeFilter === '' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
+                                        All Types
+                                    </button>
+                                    <button v-for="type in taskTypes" :key="type.value"
+                                        @click="taskTypeFilter = type.value; isTaskTypeOpen = false; fetchLogs()"
+                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors whitespace-nowrap"
+                                        :class="taskTypeFilter === type.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
+                                        <component :is="type.icon" class="w-3.5 h-3.5 opacity-70" />
+                                        {{ type.label }}
+                                    </button>
                                 </div>
+                            </transition>
+                        </div>
 
-                                <div v-if="log.exception"
-                                    class="mt-2 p-3 bg-red-50/50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono overflow-x-auto">
-                                    {{ log.exception }}
+                        <!-- Level Filter -->
+                        <div v-else class="relative flex-1 md:w-44 group" v-click-outside="() => isLevelOpen = false">
+                            <button @click="isLevelOpen = !isLevelOpen"
+                                class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
+                                <div class="flex items-center gap-2.5">
+                                    <Filter class="h-3.5 w-3.5" :class="levelFilter ? 'text-blue-500' : 'text-slate-400'" />
+                                    <span>{{ levelFilter || 'All Levels' }}</span>
                                 </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                                <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
+                                    :class="{ 'rotate-180': isLevelOpen }" />
+                            </button>
 
-            <!-- Pagination -->
-            <div v-if="totalPages > 1"
-                class="flex justify-center items-center gap-2 p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
-                <button @click="changePage(page - 1)" :disabled="page <= 1" class="pagination-btn">
-                    Previous
-                </button>
+                            <transition enter-active-class="transition duration-100 ease-out"
+                                enter-from-class="transform scale-95 opacity-0"
+                                enter-to-class="transform scale-100 opacity-100"
+                                leave-active-class="transition duration-75 ease-in"
+                                leave-from-class="transform scale-100 opacity-100"
+                                leave-to-class="transform scale-95 opacity-0">
+                                <div v-if="isLevelOpen"
+                                    class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
+                                    <button @click="levelFilter = ''; isLevelOpen = false; fetchLogs()"
+                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
+                                        :class="levelFilter === '' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
+                                        All Levels
+                                    </button>
+                                    <button v-for="lvl in levels" :key="lvl"
+                                        @click="levelFilter = lvl; isLevelOpen = false; fetchLogs()"
+                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
+                                        :class="levelFilter === lvl ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
+                                        {{ lvl }}
+                                    </button>
+                                </div>
+                            </transition>
+                        </div>
+
+                        <!-- Rows Limit Filter -->
+                        <div class="relative flex-1 md:w-28 group" v-click-outside="() => isRowsOpen = false">
+                            <button @click="isRowsOpen = !isRowsOpen"
+                                class="w-full flex items-center justify-between pl-4 pr-3.5 py-2 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-700/50 rounded-xl outline-none hover:ring-2 hover:ring-blue-500/10 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="font-bold">{{ limit }}</span>
+                                </div>
+                                <ChevronDown class="h-4 w-4 text-slate-400 transition-transform duration-200"
+                                    :class="{ 'rotate-180': isRowsOpen }" />
+                            </button>
+
+                            <transition enter-active-class="transition duration-100 ease-out"
+                                enter-from-class="transform scale-95 opacity-0"
+                                enter-to-class="transform scale-100 opacity-100"
+                                leave-active-class="transition duration-75 ease-in"
+                                leave-from-class="transform scale-100 opacity-100"
+                                leave-to-class="transform scale-95 opacity-0">
+                                <div v-if="isRowsOpen"
+                                    class="absolute z-[60] mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 overflow-hidden">
+                                    <button v-for="opt in [20, 50, 100, 200]" :key="opt"
+                                        @click="limit = opt; isRowsOpen = false; fetchLogs()"
+                                        class="w-full px-4 py-2 text-sm text-left hover:bg-blue-600 hover:text-white transition-colors"
+                                        :class="limit === opt ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300'">
+                                        {{ opt }}
+                                    </button>
+                                </div>
+                            </transition>
+                        </div>
+
+                        <!-- Toolbar Actions -->
+                        <div class="flex items-center gap-2 ml-1">
+                            <button @click="fetchLogs" class="btn-action" v-tooltip="'Refresh Logs'">
+                                <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
+                            </button>
+                            <button @click.stop="promptClearLogs"
+                                class="btn-action hover:!text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"
+                                v-tooltip="'Clear All Logs'">
+                                <Trash2 class="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Display Info Line -->
                 <div
-                    class="px-4 py-2 bg-slate-900 dark:bg-white rounded-lg text-sm font-medium text-white dark:text-slate-900">
-                    {{ page }} / {{ totalPages }}
+                    class="px-2 flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <Activity class="h-3.5 w-3.5 text-blue-500" />
+                        <span>Showing <b>{{ displayedLogs.length }}</b> of <b>{{ displayTotal }}</b> logs matching current
+                            filters</span>
+                    </div>
+                    <div v-if="currentTab === 'tasks'" class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" v-model="autoRefresh"
+                                class="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0">
+                            <span class="text-xs font-medium">Auto-refresh (5s)</span>
+                        </label>
+                    </div>
                 </div>
-                <button @click="changePage(page + 1)" :disabled="page >= totalPages" class="pagination-btn">
-                    Next
-                </button>
             </div>
-        </div>
+
+            <!-- Logs Table -->
+            <div class="content-panel">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                        <thead class="bg-slate-50 dark:bg-slate-900/50">
+                            <tr>
+                                <th scope="col" class="table-header-cell w-48">Timestamp</th>
+                                <th scope="col" class="table-header-cell w-24">
+                                    {{ currentTab === 'tasks' ? 'Type' : 'Level' }}
+                                </th>
+                                <th scope="col" class="table-header-cell w-48">
+                                    {{ currentTab === 'tasks' ? 'Target' : 'Module' }}
+                                </th>
+                                <th scope="col" class="table-header-cell">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                            <tr v-if="loading && logs.length === 0">
+                                <td colspan="4" class="px-6 py-20 text-center">
+                                    <RefreshCw class="h-8 w-8 mx-auto animate-spin mb-2 text-slate-400" />
+                                    <p class="text-slate-500 dark:text-slate-400">Loading logs...</p>
+                                </td>
+                            </tr>
+                            <tr v-else-if="logs.length === 0">
+                                <td colspan="4" class="px-6 py-20 text-center">
+                                    <p class="text-slate-500 dark:text-slate-400 italic">No logs found matching your
+                                        criteria.</p>
+                                </td>
+                            </tr>
+                            <tr v-for="(log, idx) in displayedLogs" :key="idx" class="hover-row">
+                                <td class="table-data-cell font-mono text-xs opacity-70">
+                                    {{ formatTime(log.timestamp) }}
+                                </td>
+
+                                <!-- Task Type or Level -->
+                                <td class="table-data-cell">
+                                    <span v-if="currentTab === 'tasks'" :class="[
+                                        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider',
+                                        getTaskColor(log.task_type)
+                                    ]">
+                                        <component :is="getTaskIcon(log.task_type)" class="w-3 h-3" />
+                                        {{ getTaskLabel(log.task_type) }}
+                                    </span>
+                                    <span v-else :class="[
+                                        'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider',
+                                        levelColors[log.level] || 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                                    ]">
+                                        {{ log.level }}
+                                    </span>
+                                </td>
+
+                                <!-- Target or Module -->
+                                <td class="table-data-cell font-mono text-xs opacity-70">
+                                    <div v-if="currentTab === 'tasks'" class="flex flex-col">
+                                        <span class="font-bold text-slate-700 dark:text-slate-300">{{ log.target || '-'
+                                        }}</span>
+                                        <span v-if="log.event_type" class="text-[10px] uppercase tracking-wide"
+                                            :class="{ 'text-green-600': log.event_type === 'completed', 'text-blue-600': log.event_type === 'started', 'text-red-600': log.event_type === 'failed' }">
+                                            {{ log.event_type }}
+                                        </span>
+                                    </div>
+                                    <span v-else :title="log.path">{{ log.module }}:{{ log.line }}</span>
+                                </td>
+
+                                <!-- Message and Details -->
+                                <td class="table-data-cell font-mono text-sm break-all">
+                                    {{ log.message }}
+
+                                    <!-- Task Duration Badge -->
+                                    <span v-if="log.duration_ms"
+                                        class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                        ⏱ {{ log.duration_ms }}ms
+                                    </span>
+
+                                    <!-- Task Details JSON -->
+                                    <div v-if="log.details" class="mt-2 text-xs text-slate-500 font-mono">
+                                        <span v-for="(val, key) in log.details" :key="key" class="mr-3 inline-block">
+                                            <span class="opacity-70">{{ key }}:</span> <span class="font-medium">{{ val
+                                            }}</span>
+                                        </span>
+                                    </div>
+
+                                    <div v-if="log.exception"
+                                        class="mt-2 p-3 bg-red-50/50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono overflow-x-auto">
+                                        {{ log.exception }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div v-if="totalPages > 1"
+                    class="flex justify-center items-center gap-2 p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+                    <button @click="changePage(page - 1)" :disabled="page <= 1" class="pagination-btn">
+                        Previous
+                    </button>
+                    <div
+                        class="px-4 py-2 bg-slate-900 dark:bg-white rounded-lg text-sm font-medium text-white dark:text-slate-900">
+                        {{ page }} / {{ totalPages }}
+                    </div>
+                    <button @click="changePage(page + 1)" :disabled="page >= totalPages" class="pagination-btn">
+                        Next
+                    </button>
+                </div>
+            </div>
+        </template>
     </div>
 
     <ConfirmationModal :isOpen="showClearConfirm" title="Clear All Logs"
@@ -286,11 +319,13 @@ import { ref, onMounted, watch, computed } from 'vue'
 import api from '@/utils/api'
 import * as LucideIcons from 'lucide-vue-next'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
-const { RefreshCw, Search, Filter, ChevronDown, Activity, Trash2, Cog, ShieldCheck, Router, Network } = LucideIcons
+import ScanHistoryTab from '@/components/ScanHistoryTab.vue'
+const { RefreshCw, Search, Filter, ChevronDown, Activity, Trash2, Cog, ShieldCheck, Router, Network, Radar } = LucideIcons
 import { useNotifications } from '@/composables/useNotifications'
 import { formatDate } from '@/utils/date'
 
 const { notifySuccess, notifyError } = useNotifications()
+const scanTabRef = ref<any>(null)
 
 interface LogRecord {
     timestamp: string
@@ -395,6 +430,7 @@ const changePage = (newPage: number) => {
 }
 
 const fetchLogs = async () => {
+    if (currentTab.value === 'scans') return
     loading.value = true
     try {
         const endpoint = currentTab.value === 'tasks' ? '/task-events/' : '/logs/'
@@ -482,6 +518,8 @@ watch(currentTab, (newTab, oldTab) => {
     if (newTab !== 'tasks' && autoRefresh.value) {
         autoRefresh.value = false
     }
+
+    if (newTab === 'scans') return
 
     // Reset page and filters when switching tabs
     page.value = 1

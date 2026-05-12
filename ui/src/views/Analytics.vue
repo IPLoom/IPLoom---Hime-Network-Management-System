@@ -9,35 +9,36 @@
                         Traffic insights and device distribution
                     </p>
                 </div>
-                <!-- Time Range Picker -->
-                <div class="selection-bar"
+            </div>
+
+            <div class="flex items-center gap-4">
+                <!-- Time Range Picker (Standardized) -->
+                <div class="flex p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl h-11"
                     v-if="(localConfigured && currentView === 'traffic') || (dnsConfigured && currentView === 'dns')">
                     <button
                         v-for="r in ['24h', 'yesterday', '7d', '30d', '3m', 'mtd', 'last_month', 'ytd', '1y', 'all']"
                         :key="r" @click="timeRange = r"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap"
-                        :class="timeRange === r ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'">
+                        class="px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all whitespace-nowrap uppercase tracking-wider"
+                        :class="timeRange === r ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'">
                         {{ {
-                            '24h': '24H', 'yesterday': 'Yesterday', '7d': '7D', '30d': '30D', '3m': '3M', 'mtd': 'MTD',
-                            'last_month': 'Last Month', 'ytd': 'YTD', '1y': '1Y', 'all': 'All'
+                            '24h': '24H', 'yesterday': 'Yest', '7d': '7D', '30d': '30D', '3m': '3M', 'mtd': 'MTD',
+                            'last_month': 'Last M', 'ytd': 'YTD', '1y': '1Y', 'all': 'All'
                         }[r] }}
                     </button>
                 </div>
-            </div>
 
-            <div class="flex items-center gap-4">
-                <!-- View Switcher -->
-                <div class="flex p-0.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
+                <!-- View Switcher (Standardized) -->
+                <div class="flex p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl h-11">
                     <button @click="currentView = 'traffic'"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2"
+                        class="px-5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
                         :class="currentView === 'traffic' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
-                        <Activity class="w-3.5 h-3.5" />
+                        <Activity class="w-4 h-4" />
                         Traffic
                     </button>
                     <button @click="currentView = 'dns'"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2"
+                        class="px-5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
                         :class="currentView === 'dns' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'">
-                        <ShieldCheck class="w-3.5 h-3.5" />
+                        <ShieldCheck class="w-4 h-4" />
                         DNS Security
                     </button>
                 </div>
@@ -275,7 +276,8 @@
                     <ShieldCheck class="w-8 h-8 text-slate-400" />
                 </div>
                 <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                    {{ !configStatus.adguard.enabled ? 'AdGuard Integration Disabled' : 'AdGuard Integration Required' }}
+                    {{ !configStatus.adguard.enabled ? 'AdGuard Integration Disabled' : 'AdGuard Integration Required'
+                    }}
                 </h2>
                 <p v-if="configStatus.adguard.error"
                     class="text-red-500 dark:text-red-400 text-sm mb-4 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800/30">
@@ -302,7 +304,8 @@
                     <Router class="w-8 h-8 text-slate-400" />
                 </div>
                 <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                    {{ !configStatus.openwrt.enabled ? 'OpenWRT Integration Disabled' : 'OpenWRT Integration Required' }}
+                    {{ !configStatus.openwrt.enabled ? 'OpenWRT Integration Disabled' : 'OpenWRT Integration Required'
+                    }}
                 </h2>
                 <p v-if="configStatus.openwrt.error"
                     class="text-red-500 dark:text-red-400 text-sm mb-4 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800/30">
@@ -344,7 +347,7 @@
                             Total Download</p>
                         <p class="text-2xl font-bold text-slate-900 dark:text-white">{{
                             formatBytes(trafficTotals.download)
-                            }}</p>
+                        }}</p>
                     </div>
                     <div class="card-base">
                         <div class="absolute right-0 top-0 p-4 opacity-5">

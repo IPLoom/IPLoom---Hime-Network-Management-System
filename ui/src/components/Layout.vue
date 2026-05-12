@@ -112,11 +112,10 @@ const navItems = [
   { name: 'Dashboard', path: '/', icon: HomeIcon },
   { name: 'Devices', path: '/devices', icon: ComputerDesktopIcon },
   { name: 'Topology', path: '/topology', icon: ShareIcon },
-  { name: 'Scan History', path: '/scans', icon: ListBulletIcon },
   { name: 'Events', path: '/events', icon: BellIcon },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon },
   { name: 'IP Occupancy', path: '/occupancy', icon: TableCellsIcon },
-  { name: 'System Logs', path: '/logs', icon: CommandLineIcon },
+  { name: 'Logs & Activity', path: '/logs', icon: CommandLineIcon },
   { name: 'Settings', path: '/settings', icon: Cog6ToothIcon },
 ]
 </script>

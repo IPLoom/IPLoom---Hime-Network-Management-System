@@ -47,11 +47,6 @@ const routes = [
         component: () => import('@/views/Settings.vue')
       },
       {
-        path: 'scans',
-        name: 'ScanHistory',
-        component: () => import('@/views/ScanHistory.vue')
-      },
-      {
         path: 'events',
         name: 'Events',
         component: () => import('@/views/Events.vue')
