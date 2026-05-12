@@ -274,13 +274,19 @@
                     class="w-16 h-16 bg-slate-50 dark:bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <ShieldCheck class="w-8 h-8 text-slate-400" />
                 </div>
-                <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">AdGuard Integration Required</h2>
-                <p class="text-slate-500 dark:text-slate-400 text-sm mb-6 max-w-md mx-auto">
-                    To view DNS analytics, connect your AdGuard Home instance.
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                    {{ !configStatus.adguard.enabled ? 'AdGuard Integration Disabled' : 'AdGuard Integration Required' }}
+                </h2>
+                <p v-if="configStatus.adguard.error"
+                    class="text-red-500 dark:text-red-400 text-sm mb-4 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800/30">
+                    <span class="font-bold">Error:</span> {{ configStatus.adguard.error }}
+                </p>
+                <p v-else class="text-slate-500 dark:text-slate-400 text-sm mb-6 max-w-md mx-auto">
+                    {{ !configStatus.adguard.enabled ? 'Enable the AdGuard integration in settings to view DNS analytics.' : 'To view DNS analytics, connect your AdGuard Home instance.' }}
                 </p>
                 <router-link to="/settings" class="btn-primary">
                     <Settings class="w-4 h-4" />
-                    Configure AdGuard
+                    {{ configStatus.adguard.error || !configStatus.adguard.enabled ? 'Fix in Settings' : 'Configure AdGuard' }}
                 </router-link>
             </div>
         </div>
@@ -295,15 +301,19 @@
                     class="w-16 h-16 bg-slate-50 dark:bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Router class="w-8 h-8 text-slate-400" />
                 </div>
-                <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">OpenWRT Integration Required</h2>
-                <p class="text-slate-500 dark:text-slate-400 text-sm mb-6 max-w-md mx-auto">
-                    To view traffic analytics, you need to connect your OpenWRT router and install the <code
-                        class="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-xs font-mono text-blue-600">nlbwmon</code>
-                    package.
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                    {{ !configStatus.openwrt.enabled ? 'OpenWRT Integration Disabled' : 'OpenWRT Integration Required' }}
+                </h2>
+                <p v-if="configStatus.openwrt.error"
+                    class="text-red-500 dark:text-red-400 text-sm mb-4 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800/30">
+                    <span class="font-bold">Error:</span> {{ configStatus.openwrt.error }}
+                </p>
+                <p v-else class="text-slate-500 dark:text-slate-400 text-sm mb-6 max-w-md mx-auto">
+                    {{ !configStatus.openwrt.enabled ? 'Enable the OpenWRT integration in settings to view traffic analytics.' : 'To view traffic analytics, you need to connect your OpenWRT router and install the nlbwmon package.' }}
                 </p>
                 <router-link to="/settings" class="btn-primary">
                     <Settings class="w-4 h-4" />
-                    Configure Integration
+                    {{ configStatus.openwrt.error || !configStatus.openwrt.enabled ? 'Fix in Settings' : 'Configure OpenWRT' }}
                 </router-link>
 
                 <div class="mt-8 pt-8 border-t border-slate-100 dark:border-slate-700 text-left">
@@ -334,7 +344,7 @@
                             Total Download</p>
                         <p class="text-2xl font-bold text-slate-900 dark:text-white">{{
                             formatBytes(trafficTotals.download)
-                        }}</p>
+                            }}</p>
                     </div>
                     <div class="card-base">
                         <div class="absolute right-0 top-0 p-4 opacity-5">
@@ -491,6 +501,7 @@ import api from '@/utils/api'
 import { DateTime } from 'luxon'
 import { useNotifications } from '@/composables/useNotifications'
 import { parseUTC } from '@/utils/date'
+import { getIcon } from '@/utils/icons'
 import {
     Router, Settings, Download, Upload, Users, Activity, ShieldCheck, ChevronLeft, ChevronRight, ShieldAlert
 } from 'lucide-vue-next'
@@ -499,6 +510,10 @@ import { formatBytes } from '@/utils/format'
 const loading = ref(true)
 const localConfigured = ref(false)
 const dnsConfigured = ref(false)
+const configStatus = reactive({
+    openwrt: { enabled: true, verified: true, error: null },
+    adguard: { enabled: true, verified: true, error: null }
+})
 const currentView = ref('traffic') // 'traffic' or 'dns'
 const timeRange = ref('7d')
 
@@ -519,14 +534,20 @@ const heatmapSeries = ref([])
 const checkConfig = async () => {
     try {
         const res = await api.get('/integrations/openwrt/config')
-        localConfigured.value = res.data && res.data.verified && res.data.enabled
+        configStatus.openwrt.enabled = res.data.enabled !== false
+        configStatus.openwrt.verified = res.data.verified
+        configStatus.openwrt.error = res.data.error
+        localConfigured.value = configStatus.openwrt.verified && configStatus.openwrt.enabled
     } catch (e) {
         localConfigured.value = false
     }
 
     try {
         const res = await api.get('/integrations/adguard/config')
-        dnsConfigured.value = res.data && res.data.verified
+        configStatus.adguard.enabled = res.data.enabled !== false
+        configStatus.adguard.verified = res.data.verified
+        configStatus.adguard.error = res.data.error
+        dnsConfigured.value = configStatus.adguard.verified && configStatus.adguard.enabled
     } catch (e) {
         dnsConfigured.value = false
     }
@@ -605,21 +626,21 @@ const fetchTrafficData = async () => {
         // Shifting UTC hours from backend to user's local time
         const offsetHours = Math.round(DateTime.now().offset / 60)
         const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        
+
         // matrix[day][hour]
         const localizedMatrix = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => null))
-        
+
         heatRes.data.forEach((daySeries, dayIdx) => {
             daySeries.data.forEach((point, hourIdx) => {
                 // Local Hour calculation
                 let localHour = (hourIdx + offsetHours) % 24
                 if (localHour < 0) localHour += 24
-                
+
                 // Day shift calculation
                 const dayShift = Math.floor((hourIdx + offsetHours) / 24)
                 let localDayIdx = (dayIdx + dayShift) % 7
                 if (localDayIdx < 0) localDayIdx += 7
-                
+
                 localizedMatrix[localDayIdx][localHour] = {
                     x: `${String(localHour).padStart(2, '0')}:00`,
                     y: point.y,
@@ -627,7 +648,7 @@ const fetchTrafficData = async () => {
                 }
             })
         })
-        
+
         heatmapSeries.value = days.map((day, idx) => ({
             name: day,
             data: localizedMatrix[idx]
