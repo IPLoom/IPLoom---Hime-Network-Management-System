@@ -25,8 +25,8 @@ class AdguardClient:
     def test_connection(self):
         """Check if Adguard is reachable and auth works"""
         try:
-            # Use /control/stats to verify we can actually read data (requires auth)
-            resp = self.session.get(f"{self.base_url}", timeout=5)
+            # Use /control/status to verify we can actually read data (requires auth)
+            resp = self.session.get(f"{self.base_url}/control/status", timeout=5)
             resp.raise_for_status()
             return True
         except requests.exceptions.HTTPError as e:
