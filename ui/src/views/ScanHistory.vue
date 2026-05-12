@@ -386,7 +386,9 @@ const historyStats = computed(() => {
   let count = 0
   doneScans.forEach(s => {
     if (s.started_at && s.finished_at) {
-      totalDuration += (new Date(s.finished_at) - new Date(s.started_at))
+      const start = parseUTC(s.started_at)
+      const end = parseUTC(s.finished_at)
+      totalDuration += end.diff(start).as('milliseconds')
       count++
     }
   })

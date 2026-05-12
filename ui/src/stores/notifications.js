@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia'
+import { DateTime } from 'luxon'
+import { parseUTC } from '@/utils/date'
 import { ref, computed } from 'vue'
 import api from '@/utils/api'
 
@@ -8,8 +10,8 @@ export const useNotificationStore = defineStore('notifications', () => {
   const lastViewed = ref(localStorage.getItem('hnms_notifications_last_viewed') || new Date(0).toISOString())
 
   const unreadCount = computed(() => {
-    const lastViewedDate = new Date(lastViewed.value)
-    return events.value.filter(event => new Date(event.changed_at) > lastViewedDate).length
+    const lastViewedDate = parseUTC(lastViewed.value)
+    return events.value.filter(event => parseUTC(event.changed_at) > lastViewedDate).length
   })
 
   const fetchNotifications = async () => {
@@ -27,7 +29,7 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   const markAllAsRead = () => {
-    const now = new Date().toISOString()
+    const now = DateTime.now().toUTC().toISO()
     lastViewed.value = now
     localStorage.setItem('hnms_notifications_last_viewed', now)
   }

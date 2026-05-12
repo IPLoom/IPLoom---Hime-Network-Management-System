@@ -461,7 +461,8 @@ import DiscoveryModal from '@/components/DiscoveryModal.vue'
 import { getIcon } from '@/utils/icons'
 import * as LucideIcons from 'lucide-vue-next'
 const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar } = LucideIcons
-import { formatRelativeTime } from '@/utils/date'
+import { DateTime } from 'luxon'
+import { formatRelativeTime, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
 
 const devices = ref([])
@@ -693,7 +694,8 @@ const exportDevices = async () => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `devices-${new Date().toISOString().split('T')[0]}.json`
+    const dateStr = DateTime.now().toUTC().toFormat('yyyy-MM-dd')
+    a.download = `devices-${dateStr}.json`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {

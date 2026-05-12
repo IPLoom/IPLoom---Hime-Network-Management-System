@@ -139,7 +139,7 @@
                                     <div v-else>
                                         <button v-for="event in notificationStore.events" :key="event.id"
                                             @click="goToEvent(event)" class="notif-item">
-                                            <div v-if="new Date(event.changed_at) > new Date(notificationStore.lastViewed)"
+                                            <div v-if="parseUTC(event.changed_at) > parseUTC(notificationStore.lastViewed)"
                                                 class="notif-indicator">
                                             </div>
                                             <div class="flex-shrink-0">
@@ -248,7 +248,7 @@ import { useSearchStore } from '@/stores/search'
 import { useNotificationStore } from '@/stores/notifications'
 import { useAuthStore } from '@/stores/authStore'
 import { useRouter } from 'vue-router'
-import { formatRelativeTime } from '@/utils/date'
+import { formatRelativeTime, parseUTC } from '@/utils/date'
 
 defineEmits(['toggle-mobile-menu'])
 

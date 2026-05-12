@@ -6,7 +6,8 @@ import sys
 import subprocess
 import re
 import ipaddress
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from app.core.date_utils import now as utc_now
 from typing import List, Dict, Any, Optional
 from scapy.all import ARP, Ether, srp, conf
 from app.core.db import get_connection
@@ -121,12 +122,12 @@ async def scan_device(device_id: str, ip: str) -> List[Dict[str, Any]]:
     def update_db():
         conn = get_connection()
         try:
-            conn.execute("UPDATE devices SET open_ports = ?, last_seen = ? WHERE id = ?", [json.dumps(found), datetime.now(timezone.utc), device_id])
+            conn.execute("UPDATE devices SET open_ports = ?, last_seen = ? WHERE id = ?", [json.dumps(found), utc_now(), device_id])
             conn.execute("DELETE FROM device_ports WHERE device_id = ?", [device_id])
             for p in found:
                 conn.execute(
                     "INSERT INTO device_ports (device_id, port, protocol, service, last_seen) VALUES (?, ?, ?, ?, ?)",
-                    [device_id, p["port"], p["protocol"], p["service"], datetime.now(timezone.utc)]
+                    [device_id, p["port"], p["protocol"], p["service"], utc_now()]
                 )
             conn.commit()
         finally:
@@ -136,7 +137,7 @@ async def scan_device(device_id: str, ip: str) -> List[Dict[str, Any]]:
     return found
 
 async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", options: Optional[Dict[str, Any]] = None):
-    job_start = datetime.now(timezone.utc)
+    job_start = utc_now()
     start_time = time.time()
     
     logger.info(f"Starting scan job {scan_id} for target: {target}")
@@ -326,7 +327,7 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         def save_and_update():
             conn = get_connection()
             try:
-                save_now = datetime.now(timezone.utc)
+                save_now = utc_now()
                 for res in processed_results:
                     ip, mac, hostname, ports_list, result_id = res["ip"], res["mac"], res["hostname"], res["ports_list"], res["result_id"]
                     
@@ -348,7 +349,7 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         def finalize_scan():
             conn = get_connection()
             try:
-                final_now = datetime.now(timezone.utc)
+                final_now = utc_now()
                 
                 # Increment missing_count for online devices not seen in this scan
                 conn.execute(
@@ -384,7 +385,7 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         for d_id, d_ip, d_mac, d_name, d_vendor, d_icon in offline_list:
              await asyncio.to_thread(publish_device_offline, {
                 "id": d_id, "ip": d_ip, "mac": d_mac, "hostname": d_name, "vendor": d_vendor, 
-                "icon": d_icon, "status": "offline", "timestamp": datetime.now(timezone.utc).isoformat()
+                "icon": d_icon, "status": "offline", "timestamp": utc_now().isoformat()
             })
 
         duration = int((time.time() - start_time) * 1000)
@@ -404,7 +405,7 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
         def fail_scan():
             conn = get_connection()
             try:
-                conn.execute("UPDATE scans SET status = 'failed', finished_at = ?, error_message = ? WHERE id = ?", [datetime.now(timezone.utc), str(e), scan_id])
+                conn.execute("UPDATE scans SET status = 'failed', finished_at = ?, error_message = ? WHERE id = ?", [utc_now(), str(e), scan_id])
                 conn.commit()
             finally:
                 conn.close()

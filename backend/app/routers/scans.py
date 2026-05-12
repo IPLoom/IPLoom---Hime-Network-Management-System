@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.db import get_connection
 from app.models.scans import ScanCreate, ScanRead, ScanResultRead, PaginatedScansResponse
 from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now
 import json, uuid, asyncio
 from typing import List
 from app.services.scans import scan_device
@@ -80,7 +81,7 @@ async def create_scan(payload: ScanCreate):
         conn = get_connection()
         try:
             scan_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             options_json = json.dumps(payload.options) if payload.options else None
             conn.execute(
                 "INSERT INTO scans (id, target, scan_type, options, status, created_at) VALUES (?, ?, ?, ?, 'queued', ?)",
@@ -218,7 +219,7 @@ async def clear_scan_queue():
         try:
             conn.execute(
                 "UPDATE scans SET status = 'interrupted', finished_at = ?, error_message = 'Batch canceled' WHERE status = 'queued'",
-                [datetime.now(timezone.utc)]
+                [utc_now()]
             )
             conn.commit()
         finally:
@@ -241,7 +242,7 @@ async def cancel_scan(scan_id: str):
             if row[0] in ('running', 'queued'):
                 conn.execute(
                     "UPDATE scans SET status = 'interrupted', finished_at = ?, error_message = 'Canceled by user' WHERE id = ?", 
-                    [datetime.now(timezone.utc), scan_id]
+                    [utc_now(), scan_id]
                 )
                 conn.commit()
                 return {"status": "success", "message": "Scan marked as cancelled"}

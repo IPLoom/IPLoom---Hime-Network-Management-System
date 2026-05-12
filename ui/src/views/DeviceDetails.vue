@@ -346,13 +346,13 @@
                       {{ h.status }}
                     </span>
                     <p class="text-[10px] text-slate-500 font-medium leading-tight">
-                      {{ new Date(h.changed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                      {{ parseUTC(h.changed_at).toLocal().toFormat('HH:mm') }}
                     </p>
                   </div>
                 </div>
                 <div class="text-right">
                   <div class="text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                    {{ new Date(h.changed_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) }}
+                    {{ parseUTC(h.changed_at).toLocal().toFormat('MMM d') }}
                   </div>
                 </div>
               </div>
@@ -664,7 +664,8 @@ import {
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
 import TerminalModal from '../components/TerminalModal.vue'
-import { formatRelativeTime } from '@/utils/date'
+import { DateTime } from 'luxon'
+import { formatRelativeTime, formatDate, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
 import { getIcon } from '@/utils/icons'
 import { deviceTypes, availableIcons, typeToIconMap } from '@/constants/devices'
@@ -727,8 +728,7 @@ watch(() => form.device_type, (newType) => {
   }
 })
 const formatTime = (ts) => {
-  if (!ts) return 'Never'
-  return new Date(ts).toLocaleString()
+  return formatDate(ts)
 }
 
 const getIPAllocationLabel = (val) => {
@@ -826,14 +826,14 @@ const longestOnlineStreak = computed(() => {
   let maxHours = 0
   let currentStreak = 0
   const sorted = [...history.value].reverse()
-  const now = new Date()
+  const now = DateTime.now().toUTC()
 
   for (let i = 0; i < sorted.length; i++) {
-    const start = new Date(sorted[i].changed_at)
-    const end = (i < sorted.length - 1) ? new Date(sorted[i + 1].changed_at) : now
+    const start = parseUTC(sorted[i].changed_at)
+    const end = (i < sorted.length - 1) ? parseUTC(sorted[i + 1].changed_at) : now
 
     if (sorted[i].status === 'online') {
-      const diffHours = (end - start) / (1000 * 60 * 60)
+      const diffHours = end.diff(start, 'hours').hours
       if (diffHours > 0) currentStreak += diffHours
     } else {
       maxHours = Math.max(maxHours, currentStreak)
@@ -850,14 +850,14 @@ const avgOfflineDuration = computed(() => {
   let counts = 0
 
   const sorted = [...history.value].reverse()
-  const now = new Date()
+  const now = DateTime.now().toUTC()
 
   for (let i = 0; i < sorted.length; i++) {
-    const start = new Date(sorted[i].changed_at)
-    const end = (i < sorted.length - 1) ? new Date(sorted[i + 1].changed_at) : now
+    const start = parseUTC(sorted[i].changed_at)
+    const end = (i < sorted.length - 1) ? parseUTC(sorted[i + 1].changed_at) : now
 
     if (sorted[i].status === 'offline') {
-      const diffMins = (end - start) / (1000 * 60)
+      const diffMins = end.diff(start, 'minutes').minutes
       if (diffMins > 0) {
         totalMins += diffMins
         counts++
@@ -870,17 +870,17 @@ const avgOfflineDuration = computed(() => {
 const availabilitySummary = computed(() => {
   // Create 24 blocks for the last 24 hours
   const blocks = []
-  const now = new Date()
+  const now = DateTime.now().toUTC()
 
   for (let i = 23; i >= 0; i--) {
-    const blockTime = new Date(now.getTime() - i * 60 * 60 * 1000)
-    const label = blockTime.getHours() + ':00'
+    const blockTime = now.minus({ hours: i })
+    const label = blockTime.toFormat('HH:mm')
 
     // Find history event closest to this time
     // For now, simpler: check if device was online in that window
     // Higher fidelity: find last status before this window
     const eventInWindow = history.value.find(e => {
-      const et = new Date(e.changed_at)
+      const et = parseUTC(e.changed_at)
       return et <= blockTime
     })
 
@@ -982,7 +982,7 @@ const chartSeries = computed(() => {
     data: fidelityHistory.value
       .filter(h => h && h.timestamp)
       .map(h => {
-        const ts = new Date(h.timestamp).getTime()
+        const ts = parseUTC(h.timestamp).toMillis()
         return {
           x: isNaN(ts) ? 0 : ts,
           y: h.status === 'online' ? 1 : 0
@@ -1011,7 +1011,7 @@ const totalTraffic = computed(() => {
 const trafficSeries = computed(() => {
   if (!device.value?.traffic_history) return []
   const mapped = device.value.traffic_history.map(h => {
-    const ts = new Date(h.timestamp).getTime()
+    const ts = parseUTC(h.timestamp).toMillis()
     return {
       ts: isNaN(ts) ? 0 : ts,
       down: h.down || 0,

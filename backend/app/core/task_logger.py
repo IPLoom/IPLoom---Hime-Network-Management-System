@@ -2,7 +2,8 @@ import logging
 import json
 import os
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
+from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now
 import traceback
 
 def get_log_path():
@@ -22,7 +23,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record):
         # Base log entry
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now().isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "module": record.module,

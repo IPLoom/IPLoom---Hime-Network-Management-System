@@ -6,6 +6,7 @@ import os
 import re
 from base64 import b64encode
 from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now, parse_iso_utc
 from app.core.config import get_settings
 from app.core.db import get_connection
 from app.core.task_logger import log_task_event
@@ -21,7 +22,7 @@ class OpenWRTClient:
         self.token = None
         self.session = requests.Session()
 
-        self.config_file = "data/openwrt_config.json" # Path to store last_sync
+        # No longer using local config file, state is in DB
 
     def login(self):
         """Authenticate with OpenWRT via ubus session login"""
@@ -340,23 +341,23 @@ class OpenWRTClient:
             finally:
                 conn.close()
             
-            # Update last_sync timestamp in config but preserve state
+            # Update last_sync and last_run in DB
             try:
-                # Read current config to get latest state
-                current_config = {}
-                if os.path.exists(self.config_file):
-                    with open(self.config_file, 'r') as f:
-                        current_config = json.load(f)
-                
-                # Update timestamp
-                current_config["last_sync"] = datetime.utcnow().isoformat()
-                
-                # Write back
-                with open(self.config_file, 'w') as f:
-                    json.dump(current_config, f, indent=4)
-                    
+                # Read current config from DB
+                conn_main = get_connection()
+                try:
+                    row = conn_main.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
+                    if row:
+                        current_config = json.loads(row[0])
+                        current_config["last_sync"] = utc_now().isoformat()
+                        current_config["last_run"] = utc_now().isoformat()
+                        conn_main.execute("UPDATE integrations SET config = ? WHERE name = 'openwrt'", [json.dumps(current_config)])
+                        from app.core.db import commit
+                        commit()
+                finally:
+                    conn_main.close()
             except Exception as e:
-                logger.error(f"Failed to update OpenWRT last_sync: {e}")
+                logger.error(f"Failed to update OpenWRT timestamps in DB: {e}")
 
             duration = int((time.time() - start_time) * 1000)
             logger.info(f"OpenWRT Sync complete: {len(leases)} leases processed.")

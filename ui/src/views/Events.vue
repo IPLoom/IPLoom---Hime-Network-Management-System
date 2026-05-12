@@ -519,11 +519,11 @@ const chartOptions = computed(() => ({
     labels: {
       style: { colors: '#94a3b8', fontSize: '9px', fontWeight: 600 },
       formatter: function (val, timestamp) {
-        const date = new Date(timestamp)
+        const date = parseUTC(timestamp).toLocal()
         if (statsTimeRange.value <= 24) {
-          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return date.toFormat('HH:mm')
         }
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+        return date.toFormat('MMM d')
       }
     },
     axisBorder: { show: false }, axisTicks: { show: false }
@@ -543,19 +543,7 @@ const chartSeries = computed(() => {
 
   stats.value.forEach(s => {
     const dt = parseUTC(s.timestamp).toLocal()
-    const date = new Date(dt.toMillis())
-
-    if (statsTimeRange.value <= 24) {
-      const min = date.getMinutes()
-      date.setMinutes(Math.floor(min / 5) * 5, 0, 0)
-    } else if (statsTimeRange.value <= 168) {
-      const hours = date.getHours()
-      date.setHours(Math.floor(hours / 4) * 4, 0, 0, 0)
-    } else {
-      date.setHours(0, 0, 0, 0)
-    }
-
-    const key = date.getTime()
+    const key = dt.startOf(statsTimeRange.value <= 24 ? 'hour' : 'day').toMillis()
     if (!buckets[key]) buckets[key] = { online: 0, offline: 0 }
     buckets[key].online += s.online_count
     buckets[key].offline += s.offline_count

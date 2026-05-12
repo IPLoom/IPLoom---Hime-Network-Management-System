@@ -6,6 +6,7 @@ import threading
 from typing import Any, Optional
 from app.core.config import get_settings
 from app.core.db import get_connection
+from app.core.date_utils import format_iso, parse_iso_utc
 
 logger = logging.getLogger(__name__)
 # Add a dedicated file handler for MQTT debugging if not already present
@@ -304,10 +305,22 @@ def publish_device_status(device_info: dict, status: str):
     attr_topic = f"{base_topic}/devices/iploom_{key}/attributes"
     # Filter out internal DB fields and format for HA
     last_seen = device_info.get("last_seen")
-    if hasattr(last_seen, 'isoformat'):
-        last_seen_str = last_seen.isoformat()
+    if last_seen:
+        try:
+            if isinstance(last_seen, str):
+                last_seen_str = format_iso(parse_iso_utc(last_seen))
+            elif hasattr(last_seen, 'isoformat'):
+                # Ensure it's treated as UTC if naive
+                from datetime import timezone
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+                last_seen_str = format_iso(last_seen)
+            else:
+                last_seen_str = str(last_seen)
+        except:
+            last_seen_str = str(last_seen)
     else:
-        last_seen_str = str(last_seen or "")
+        last_seen_str = ""
 
     ha_attributes = {
         "ip_address": device_info.get("ip"),

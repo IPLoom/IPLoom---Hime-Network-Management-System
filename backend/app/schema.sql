@@ -126,3 +126,5 @@ CREATE INDEX IF NOT EXISTS idx_traffic_timestamp ON device_traffic_history(times
 CREATE INDEX IF NOT EXISTS idx_scan_results_scan_id ON scan_results(scan_id);
 CREATE INDEX IF NOT EXISTS idx_scan_results_mac ON scan_results(mac);
 CREATE INDEX IF NOT EXISTS idx_scan_results_ip ON scan_results(ip);
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
+CREATE INDEX IF NOT EXISTS idx_scans_finished_at ON scans(finished_at);

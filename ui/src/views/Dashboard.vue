@@ -310,7 +310,7 @@ import {
   Database, Wifi, WifiOff, ShieldAlert, Activity, RefreshCw,
   Layers, ArrowDown, ArrowUp, Zap, HelpCircle, Lock, ShieldCheck, Search, Globe
 } from 'lucide-vue-next'
-import { formatRelativeTime } from '@/utils/date'
+import { formatRelativeTime, parseUTC } from '@/utils/date'
 
 const loading = ref(false)
 const globalStats = ref({
@@ -436,8 +436,8 @@ const trafficChartOptions = computed(() => ({
 }))
 
 const trafficSeries = computed(() => [
-  { name: 'Download', data: trafficData.value.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.download || 0 })) },
-  { name: 'Upload', data: trafficData.value.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.upload || 0 })) }
+  { name: 'Download', data: trafficData.value.map(d => ({ x: parseUTC(d.timestamp).toJSDate().getTime(), y: d.download || 0 })) },
+  { name: 'Upload', data: trafficData.value.map(d => ({ x: parseUTC(d.timestamp).toJSDate().getTime(), y: d.upload || 0 })) }
 ])
 
 const distributionOptions = computed(() => ({
@@ -475,8 +475,8 @@ const distributionOptions = computed(() => ({
 }))
 
 const dnsHistorySeries = computed(() => [
-  { name: 'Passed', data: dnsHistory.value.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.total - d.blocked })) },
-  { name: 'Blocked', data: dnsHistory.value.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.blocked })) }
+  { name: 'Passed', data: dnsHistory.value.map(d => ({ x: parseUTC(d.timestamp).toJSDate().getTime(), y: d.total - d.blocked })) },
+  { name: 'Blocked', data: dnsHistory.value.map(d => ({ x: parseUTC(d.timestamp).toJSDate().getTime(), y: d.blocked })) }
 ])
 
 const dnsChartOptions = computed(() => ({

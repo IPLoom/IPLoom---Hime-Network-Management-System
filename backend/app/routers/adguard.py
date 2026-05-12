@@ -35,6 +35,7 @@ def get_config():
         conn.close()
 
 from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now
 @router.post("/config")
 def save_config(config: AdguardConfig):
     conn = get_connection()
@@ -58,7 +59,7 @@ def save_config(config: AdguardConfig):
             client = AdguardClient(data["url"], data["username"], data["password"])
             client.test_connection()
             data["verified"] = True
-            data["last_check"] = datetime.now(timezone.utc).isoformat()
+            data["last_check"] = utc_now().isoformat()
         except Exception as e:
             logger.warning(f"Adguard verification failed during save: {e}")
             data["verified"] = False

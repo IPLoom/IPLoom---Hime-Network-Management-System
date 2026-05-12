@@ -4,6 +4,7 @@ import httpx
 import re
 import asyncio
 from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now
 from uuid import uuid4
 from typing import Optional, List, Dict, Any
 
@@ -33,7 +34,7 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
     def sync_batch_upsert():
         conn = get_connection()
         try:
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             upserted_ids = []
             new_devices_to_enrich = [] # (id, mac)
             online_notifications = [] # device_info dicts

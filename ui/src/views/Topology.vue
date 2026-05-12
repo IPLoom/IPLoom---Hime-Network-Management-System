@@ -292,6 +292,8 @@ import { ForceLayout } from "v-network-graph/lib/force-layout"
 import api from '@/utils/api'
 import { getIcon } from '@/utils/icons'
 import { formatBytes } from '@/utils/format'
+import { parseUTC } from '@/utils/date'
+import { DateTime } from 'luxon'
 import {
     Loader2, Plus, Minus, RefreshCw, X, ArrowDown, ArrowUp, ExternalLink, AlertTriangle, Search, ShieldAlert, Filter, ChevronDown
 } from 'lucide-vue-next'
@@ -596,7 +598,7 @@ const getPortColor = (port: number, service: string) => {
 
 const getActivityColor = (lastSeen: string | null) => {
     if (!lastSeen) return 'rgba(148, 163, 184, 0.05)'
-    const diff = Date.now() - new Date(lastSeen).getTime()
+    const diff = DateTime.now().toMillis() - parseUTC(lastSeen).toMillis()
     const mins = diff / 1000 / 60
     if (mins < 5) return 'rgba(34, 211, 238, 0.4)' 
     if (mins < 30) return 'rgba(34, 211, 238, 0.15)' 

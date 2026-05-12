@@ -288,6 +288,7 @@ import * as LucideIcons from 'lucide-vue-next'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 const { RefreshCw, Search, Filter, ChevronDown, Activity, Trash2, Cog, ShieldCheck, Router, Network } = LucideIcons
 import { useNotifications } from '@/composables/useNotifications'
+import { formatDate } from '@/utils/date'
 
 const { notifySuccess, notifyError } = useNotifications()
 
@@ -374,11 +375,7 @@ const getTaskLabel = (type?: string) => {
 }
 
 const formatTime = (ts: string) => {
-    try {
-        return new Date(ts).toLocaleString()
-    } catch {
-        return ts
-    }
+    return formatDate(ts)
 }
 
 let debounceTimer: any = null

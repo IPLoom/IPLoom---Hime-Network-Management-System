@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from app.core.date_utils import now as utc_now
 from typing import Optional, Union, Any
 from jose import jwt, JWTError
 import bcrypt
@@ -27,9 +28,9 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = utc_now() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+        expire = utc_now() + timedelta(minutes=settings.access_token_expire_minutes)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)

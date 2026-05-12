@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
 from app.core.db import get_connection
 from app.core.dns_db import get_dns_connection
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from app.core.date_utils import now as utc_now
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ def get_traffic_analytics(range: str = "24h"):
     """
     conn = get_connection()
     try:
-        now = datetime.now()
+        now = utc_now()
         start_time, end_time, bucket_size, trunc_arg = get_date_range(range, now)
 
         sql = f"""
@@ -510,7 +511,7 @@ def get_dns_top_clients(range: str = "24h", limit: int = 10, offset: int = 0):
 
 def get_date_range(range_str: str, now: Optional[datetime] = None):
     if not now:
-        now = datetime.now()
+        now = utc_now()
     
     # Defaults
     start = now - timedelta(hours=24)
@@ -777,7 +778,7 @@ def get_analytics_summary():
     conn_main = get_connection()
     conn_dns = get_dns_connection()
     
-    now = datetime.now()
+    now = utc_now()
     start_24h = now - timedelta(hours=24)
     
     try:

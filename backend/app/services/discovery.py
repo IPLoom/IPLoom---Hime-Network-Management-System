@@ -10,6 +10,7 @@ import sys
 import subprocess
 import re
 from datetime import datetime, timezone
+from app.core.date_utils import now as utc_now
 from app.core.db import get_connection
 
 logger = logging.getLogger(__name__)

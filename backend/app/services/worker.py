@@ -1,8 +1,8 @@
-
 import asyncio
 import logging
 from typing import Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
+from app.core.date_utils import now as utc_now, parse_iso_utc
 import json
 from app.core.db import get_connection
 from app.services.scans import run_scan_job, discover_network_scapy
@@ -33,7 +33,7 @@ async def scan_runner_loop():
     last_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     while True:
         try:
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             # Only cleanup stale scans every 60 seconds
             run_cleanup = (now - last_cleanup).total_seconds() > 60
             
@@ -51,7 +51,7 @@ async def handle_schedules():
     def sync_check():
         conn = get_connection()
         try:
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             # 1. Fetch Config for Global Discovery
             config_rows = conn.execute("SELECT key, value FROM config WHERE key IN ('scan_subnets', 'scan_interval', 'last_discovery_run_at')").fetchall()
             config = {r[0]: r[1] for r in config_rows}
@@ -113,16 +113,15 @@ async def handle_schedules():
                         # Config: url, username, password, interval (mins), last_sync (iso)
                         if ow_config.get("url") and ow_config.get("username"):
                             interval_mins = int(ow_config.get("interval", 15))
-                            last_sync_str = ow_config.get("last_sync")
+                            last_run_str = ow_config.get("last_run") or ow_config.get("last_sync")
                             
                             should_run = False
-                            if not last_sync_str:
+                            if not last_run_str:
                                 should_run = True
                             else:
                                 try:
-                                    last_sync = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
-                                    if last_sync.tzinfo is None: last_sync = last_sync.replace(tzinfo=timezone.utc)
-                                    if now >= last_sync + timedelta(minutes=interval_mins):
+                                    last_run = parse_iso_utc(last_run_str)
+                                    if now >= last_run + timedelta(minutes=interval_mins):
                                         should_run = True
                                 except:
                                     should_run = True
@@ -153,10 +152,7 @@ async def handle_schedules():
                                 should_run = True
                             else:
                                 try:
-                                    last_run = datetime.fromisoformat(last_run_str.replace('Z', '+00:00'))
-                                    if last_run.tzinfo is None:
-                                        last_run = last_run.replace(tzinfo=timezone.utc)
-                                    
+                                    last_run = parse_iso_utc(last_run_str)
                                     diff = (now - last_run).total_seconds()
                                     target_diff = interval_mins * 60
                                     
@@ -229,7 +225,7 @@ async def handle_schedules():
                         row = conn.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
                         if row:
                             c = json.loads(row[0])
-                            c["last_sync"] = datetime.now(timezone.utc).isoformat()
+                            c["last_sync"] = utc_now().isoformat()
                             conn.execute("UPDATE integrations SET config = ? WHERE name = 'openwrt'", [json.dumps(c)])
                             from app.core.db import commit
                             commit()
@@ -250,7 +246,7 @@ async def handle_schedules():
                 row = conn.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
                 if row:
                     c = json.loads(row[0])
-                    c["last_run"] = datetime.now(timezone.utc).isoformat()
+                    c["last_run"] = utc_now().isoformat()
                     conn.execute("UPDATE integrations SET config = ? WHERE name = 'openwrt'", [json.dumps(c)])
                     from app.core.db import commit
                     commit()
@@ -284,7 +280,7 @@ async def handle_schedules():
                 row = conn.execute("SELECT config FROM integrations WHERE name = 'adguard'").fetchone()
                 if row:
                     c = json.loads(row[0])
-                    c["last_run"] = datetime.now(timezone.utc).isoformat()
+                    c["last_run"] = utc_now().isoformat()
                     conn.execute("UPDATE integrations SET config = ? WHERE name = 'adguard'", [json.dumps(c)])
                     from app.core.db import commit
                     commit()
@@ -297,7 +293,7 @@ async def enqueue_scan(target: str, scan_type: str) -> Optional[str]:
         conn = get_connection()
         try:
             t = target.strip()
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             
             # Check for exactly same scan (target + type) already queued or running
             active = conn.execute(
@@ -322,7 +318,7 @@ async def handle_queued_scans(cleanup=False):
     def get_job():
         conn = get_connection()
         try:
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             
             if cleanup:
                 # Re-clean stale scans (interrupted)

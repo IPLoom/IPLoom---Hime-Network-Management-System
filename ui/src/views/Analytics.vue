@@ -488,7 +488,9 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import api from '@/utils/api'
-import { getIcon } from '@/utils/icons'
+import { DateTime } from 'luxon'
+import { useNotifications } from '@/composables/useNotifications'
+import { parseUTC } from '@/utils/date'
 import {
     Router, Settings, Download, Upload, Users, Activity, ShieldCheck, ChevronLeft, ChevronRight, ShieldAlert
 } from 'lucide-vue-next'
@@ -585,8 +587,8 @@ const fetchTrafficData = async () => {
         trafficTotals.value = trafficRes.data.totals
         const series = trafficRes.data.series
         chartSeries.value = [
-            { name: 'Download', data: series.map(d => [new Date(d.timestamp).getTime(), d.download]) },
-            { name: 'Upload', data: series.map(d => [new Date(d.timestamp).getTime(), d.upload]) }
+            { name: 'Download', data: series.map(d => [parseUTC(d.timestamp).toJSDate().getTime(), d.download]) },
+            { name: 'Upload', data: series.map(d => [parseUTC(d.timestamp).toJSDate().getTime(), d.upload]) }
         ]
 
         // Process Top Devices (Top 5 for widget)
@@ -599,8 +601,37 @@ const fetchTrafficData = async () => {
         // Process Category Usage
         categorySeries.value = catRes.data.map(c => c.total)
 
-        // Process Heatmap
-        heatmapSeries.value = heatRes.data
+        // Process Heatmap with Localization
+        // Shifting UTC hours from backend to user's local time
+        const offsetHours = Math.round(DateTime.now().offset / 60)
+        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        // matrix[day][hour]
+        const localizedMatrix = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => null))
+        
+        heatRes.data.forEach((daySeries, dayIdx) => {
+            daySeries.data.forEach((point, hourIdx) => {
+                // Local Hour calculation
+                let localHour = (hourIdx + offsetHours) % 24
+                if (localHour < 0) localHour += 24
+                
+                // Day shift calculation
+                const dayShift = Math.floor((hourIdx + offsetHours) / 24)
+                let localDayIdx = (dayIdx + dayShift) % 7
+                if (localDayIdx < 0) localDayIdx += 7
+                
+                localizedMatrix[localDayIdx][localHour] = {
+                    x: `${String(localHour).padStart(2, '0')}:00`,
+                    y: point.y,
+                    top: point.top
+                }
+            })
+        })
+        
+        heatmapSeries.value = days.map((day, idx) => ({
+            name: day,
+            data: localizedMatrix[idx]
+        }))
 
         // Dynamic Color Scale Logic
         let maxVal = 0
@@ -911,8 +942,8 @@ const fetchDnsData = async () => {
         // Format Traffic Series
         const series = trafficRes.data
         dnsTrafficSeries.value = [
-            { name: 'Passed', data: series.map(d => [new Date(d.timestamp).getTime(), d.total - d.blocked]) },
-            { name: 'Blocked', data: series.map(d => [new Date(d.timestamp).getTime(), d.blocked]) }
+            { name: 'Passed', data: series.map(d => [parseUTC(d.timestamp).toJSDate().getTime(), d.total - d.blocked]) },
+            { name: 'Blocked', data: series.map(d => [parseUTC(d.timestamp).toJSDate().getTime(), d.blocked]) }
         ]
 
         topBlockedDomains.value = blockedRes.data
@@ -956,7 +987,7 @@ const calculateAvgThroughput = () => {
     if (total === 0) return '0 B/s'
 
     let seconds = 1
-    const now = new Date()
+    const now = DateTime.now().toUTC()
 
     switch (timeRange.value) {
         case '24h':
@@ -973,29 +1004,29 @@ const calculateAvgThroughput = () => {
             seconds = 90 * 24 * 3600
             break
         case 'last_month':
-            const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-            const lastMonthEnd = new Date(thisMonth.getTime() - 1)
-            const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1)
-            seconds = Math.ceil((lastMonthEnd - lastMonthStart) / 1000)
+            const thisMonth = now.startOf('month')
+            const lastMonthEnd = thisMonth.minus({ milliseconds: 1 })
+            const lastMonthStart = lastMonthEnd.startOf('month')
+            seconds = Math.ceil(lastMonthEnd.diff(lastMonthStart, 'seconds').seconds)
             break
         case 'mtd':
-            const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1)
-            seconds = Math.max(1, (now - mtdStart) / 1000)
+            const mtdStart = now.startOf('month')
+            seconds = Math.max(1, now.diff(mtdStart, 'seconds').seconds)
             break
         case 'ytd':
-            const ytdStart = new Date(now.getFullYear(), 0, 1)
-            seconds = Math.max(1, (now - ytdStart) / 1000)
+            const ytdStart = now.startOf('year')
+            seconds = Math.max(1, now.diff(ytdStart, 'seconds').seconds)
             break
         case '1y':
             seconds = 365 * 24 * 3600
             break
         case 'all':
             // Try to find earliest data point, else default to 1y
-            let earliest = now.getTime()
+            let earliest = now.toMillis()
             if (chartSeries.value.length > 0 && chartSeries.value[0].data.length > 0) {
                 earliest = chartSeries.value[0].data[0][0]
             }
-            const diff = (now.getTime() - earliest) / 1000
+            const diff = (now.toMillis() - earliest) / 1000
             seconds = Math.max(24 * 3600, diff) // Min 1 day
             break
     }

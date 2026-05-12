@@ -4,6 +4,7 @@ import requests
 import json
 import os
 from datetime import datetime, timezone, timedelta
+from app.core.date_utils import now as utc_now, parse_iso_utc
 from app.core.config import get_settings
 from app.core.db import get_connection, commit
 from app.core.dns_db import get_dns_connection, commit_dns
@@ -27,9 +28,21 @@ class AdguardClient:
         try:
             # Use /control/status to verify we can actually read data (requires auth)
             resp = self.session.get(f"{self.base_url}/control/status", timeout=5)
+            
+            if resp.status_code == 401:
+                raise Exception("Authentication failed: Invalid username or password")
+                
             resp.raise_for_status()
+            
+            # Verify it's actually AdGuard by checking JSON structure
+            data = resp.json()
+            if "version" not in data:
+                raise Exception("Response received but it doesn't look like an AdGuard Home instance")
+                
             return True
         except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise Exception("Authentication failed: Invalid username or password")
             logger.error(f"Adguard connection failed: {e}. Response: {e.response.text}")
             raise Exception(f"HTTP Error {e.response.status_code}: {e.response.text}")
         except Exception as e:
@@ -106,7 +119,7 @@ class AdguardClient:
             last_sync_ts = 0
             if last_sync_str:
                 try:
-                    last_sync_ts = datetime.fromisoformat(last_sync_str).timestamp()
+                    last_sync_ts = parse_iso_utc(last_sync_str).timestamp()
                 except:
                     pass
             
@@ -146,7 +159,7 @@ class AdguardClient:
                     # Python 3.11+ supports fromisoformat("2023-10-10T10:10:10.123Z") usually
                     # If simplified parsing needed:
                     try:
-                        ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                        ts = parse_iso_utc(ts_str)
                     except:
                         continue
                         
@@ -239,7 +252,7 @@ class AdguardClient:
             
             try:
                 logger.info("Calculating 24h stats...")
-                one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+                one_day_ago = utc_now() - timedelta(days=1)
                 
                 stats_rows = conn_dns.execute("""
                     SELECT 
@@ -264,8 +277,9 @@ class AdguardClient:
                     
                     conn_main.execute("UPDATE devices SET dns_stats = ? WHERE id = ?", [stats_json, dev_id])
                 
-                # 4. Update Main DB Cursor (last_sync)
-                config["last_sync"] = datetime.fromtimestamp(new_last_sync_ts, tz=timezone.utc).isoformat()
+                # 4. Update Main DB Cursor (last_sync and last_run)
+                config["last_sync"] = parse_iso_utc(datetime.fromtimestamp(new_last_sync_ts, tz=timezone.utc).isoformat()).isoformat()
+                config["last_run"] = utc_now().isoformat()
                 conn_main.execute("UPDATE integrations SET config = ? WHERE name = 'adguard'", [json.dumps(config)])
                 
                 commit(conn_main)
@@ -275,7 +289,7 @@ class AdguardClient:
                 # 5. Retention Cleanup (Keep 7 days by default)
                 # Ideally config driven, but 7 days is reasonable for deep logs.
                 try:
-                    cleanup_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+                    cleanup_cutoff = utc_now() - timedelta(days=7)
                     conn_dns.execute("DELETE FROM dns_logs WHERE timestamp < ?", [cleanup_cutoff])
                     # Optional: compact if needed, but auto-checkpoint usually handles WAL
                     commit_dns()
@@ -313,7 +327,8 @@ class AdguardClient:
             
             raise e
         finally:
-            conn_main.close()
+            if 'conn_main' in locals():
+                conn_main.close()
             # conn_dns closed? No, we use shared connection but we should probably leave it open or handle properly.
             # The get_dns_connection uses shared, so we don't 'close' it per se, just release cursor? 
             # The helper doesn't really close valid cursors but that's fine for duckdb.

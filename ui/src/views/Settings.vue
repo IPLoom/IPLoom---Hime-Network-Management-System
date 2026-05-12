@@ -750,6 +750,7 @@ import * as LucideIcons from 'lucide-vue-next'
 import { Save, RotateCcw, Trash2, AlertTriangle, Loader2, Plus, Fingerprint, Pencil, Trash, X, Check, Search, ShieldCheck, Tag, Settings2, Layout, ChevronDown, Download, Upload, Database } from 'lucide-vue-next'
 
 import { useNotifications } from '@/composables/useNotifications'
+import { formatDate } from '@/utils/date'
 
 const settings = reactive({
   scan_subnets: '[]',
@@ -1294,11 +1295,7 @@ const handleRestoreUpload = (event) => {
 
 
 const formatLastRun = (dateStr) => {
-  if (!dateStr) return 'Never'
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleString()
-  } catch { return 'Never' }
+  return formatDate(dateStr)
 }
 
 onMounted(() => {

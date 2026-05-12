@@ -37,14 +37,14 @@ app.add_middleware(
 
 def cleanup_stale_scans():
     from app.core.db import get_connection
-    from datetime import datetime, timezone
+    from app.core.date_utils import now as utc_now
     logger.info("Cleaning up stale scans from previous run...")
     conn = get_connection()
     try:
         # Mark running or queued scans as interrupted on startup
         conn.execute(
             "UPDATE scans SET status = 'interrupted', finished_at = ?, error_message = 'Interrupted by server restart' WHERE status IN ('running', 'queued')",
-            [datetime.now(timezone.utc)]
+            [utc_now()]
         )
         conn.commit()
     except Exception as e:
