@@ -213,14 +213,19 @@ class DiscoveryService:
                         ip = addr.address
                         mask = addr.netmask
                         if ip and mask:
-                            is_private = ip.startswith(("192.168.", "10.", "172.16.", "172.31."))
-                            if not target_network or is_private:
+                            # 169.254.x.x is Link-Local (APIPA), skip it for automatic discovery
+                            if ip.startswith("169.254."):
+                                continue
+                                
+                            is_rfc1918 = ip.startswith(("192.168.", "10.", "172.16.", "172.31."))
+                            if not target_network or is_rfc1918:
                                 target_network = ipaddress.IPv4Network(f"{ip}/{mask}", strict=False)
                                 local_ip = ip
-                                if is_private: break
-                if target_network and target_network.is_private: break
+                                if is_rfc1918: break
+                if target_network and target_network.is_private and not str(target_network).startswith("169.254"): 
+                    break
 
-            if not target_network:
+            if not target_network or str(target_network).startswith("169.254"):
                 target_network = ipaddress.IPv4Network("192.168.1.0/24")
                 local_ip = "127.0.0.1"
 

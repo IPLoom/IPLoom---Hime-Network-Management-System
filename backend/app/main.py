@@ -63,9 +63,20 @@ async def on_startup():
     asyncio.create_task(scheduler_loop())
     asyncio.create_task(scan_runner_loop())
 
-    # Run network discovery and cache results for onboarding
-    from app.services.discovery import DiscoveryService
-    asyncio.create_task(DiscoveryService.run_and_cache())
+    # Run network discovery and cache results for onboarding ONLY if not configured
+    from app.core.db import get_connection
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT value FROM config WHERE key = 'scan_subnets'").fetchone()
+        is_configured = bool(row and row[0] and row[0].strip())
+    finally:
+        conn.close()
+
+    if not is_configured:
+        from app.services.discovery import DiscoveryService
+        asyncio.create_task(DiscoveryService.run_and_cache())
+    else:
+        logger.info("Skipping background network discovery: Subnets already configured.")
     
 from app.routers.auth import router as auth_router
 from app.core.auth import get_current_user
