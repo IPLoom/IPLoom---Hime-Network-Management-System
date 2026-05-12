@@ -15,6 +15,7 @@ class AdguardConfig(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     interval: int = 5
+    enabled: bool = True
 
 @router.get("/config")
 def get_config():
@@ -50,7 +51,7 @@ def save_config(config: AdguardConfig):
         # Store
         data = config.dict()
         # Merge existing state fields (last_sync, last_run, etc.)
-        for key in ["last_sync", "last_run", "verified", "last_check"]:
+        for key in ["last_sync", "last_run", "verified", "last_check", "enabled"]:
             if key in existing and key not in data:
                 data[key] = existing[key]
 

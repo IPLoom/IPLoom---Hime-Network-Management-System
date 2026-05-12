@@ -81,12 +81,26 @@ class MQTTManager:
     def _connect_persistent(self):
         """Connects the persistent client."""
         with self._lock:
+            config = self.get_config()
+            
+            # If disabled, ensure we are disconnected
+            if config.get('mqtt_enabled', 'true') != 'true':
+                if self._client:
+                    logger.info("MQTT integration is disabled. Disconnecting persistent client.")
+                    try:
+                        self._client.loop_stop()
+                        self._client.disconnect()
+                    except:
+                        pass
+                    self._client = None
+                    self._save_status("offline", "Integration disabled")
+                return
+
             # If we already have a client, don't create a new one.
             # Paho handles auto-reconnect automatically in its own background thread.
             if self._client:
                 return
                 
-            config = self.get_config()
             # Use a highly unique client ID to avoid conflicts during restarts/reloads/multiple processes
             import os
             import random
@@ -134,7 +148,7 @@ class MQTTManager:
         settings = get_settings()
         conn = get_connection()
         try:
-            keys = ['mqtt_broker', 'mqtt_port', 'mqtt_base_topic', 'mqtt_username', 'mqtt_password']
+            keys = ['mqtt_broker', 'mqtt_port', 'mqtt_base_topic', 'mqtt_username', 'mqtt_password', 'mqtt_enabled']
             rows = conn.execute("SELECT key, value FROM config WHERE key IN ({})".format(','.join(['?']*len(keys))), keys).fetchall()
             config = {r[0]: r[1] for r in rows}
             

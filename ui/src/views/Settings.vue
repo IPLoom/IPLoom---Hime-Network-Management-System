@@ -120,7 +120,15 @@
               <h2 class="text-base font-semibold text-slate-900 dark:text-white">MQTT Configuration</h2>
               <p class="text-xs text-slate-500">Integration with Home Assistant</p>
             </div>
-            <div class="ml-auto flex items-center gap-2">
+            <div class="ml-auto flex items-center gap-3">
+              <label class="premium-switch group">
+                <span class="premium-switch-label">Integration Enabled</span>
+                <div class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="settings.mqtt_enabled" class="sr-only peer">
+                  <div class="premium-switch-slider peer-checked:bg-purple-600"></div>
+                </div>
+              </label>
+
               <div v-if="mqttStatus"
                 class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 mr-2">
                 <div class="w-2 h-2 rounded-full"
@@ -195,10 +203,18 @@
               <h2 class="text-base font-semibold text-slate-900 dark:text-white">OpenWRT Integration</h2>
               <p class="text-xs text-slate-500">Sync leases & traffic from Router (Pull Model)</p>
             </div>
-            <!-- Status Badge -->
-            <div class="ml-auto flex items-center gap-2">
+            <!-- Status Badge & Toggle -->
+            <div class="ml-auto flex items-center gap-3">
+              <label class="premium-switch group">
+                <span class="premium-switch-label">Integration Enabled</span>
+                <div class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="settings.openwrt_enabled" class="sr-only peer">
+                  <div class="premium-switch-slider peer-checked:bg-indigo-600"></div>
+                </div>
+              </label>
+
               <div v-if="settings.openwrt_url"
-                class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 mr-2">
+                class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div class="w-2 h-2 rounded-full" :class="{
                   'bg-emerald-500 animate-pulse': openWrtStatus === 'online',
                   'bg-red-500': openWrtStatus === 'error',
@@ -280,10 +296,18 @@
               <h2 class="text-base font-semibold text-slate-900 dark:text-white">AdGuard Home Integration</h2>
               <p class="text-xs text-slate-500">Sync blocked domains and DNS stats</p>
             </div>
-            <!-- Status Badge -->
-            <div class="ml-auto flex items-center gap-2">
+            <!-- Status Badge & Toggle -->
+            <div class="ml-auto flex items-center gap-3">
+              <label class="premium-switch group">
+                <span class="premium-switch-label">Integration Enabled</span>
+                <div class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="settings.adguard_enabled" class="sr-only peer">
+                  <div class="premium-switch-slider peer-checked:bg-emerald-600"></div>
+                </div>
+              </label>
+
               <div v-if="settings.adguard_url"
-                class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 mr-2">
+                class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div class="w-2 h-2 rounded-full" :class="{
                   'bg-emerald-500 animate-pulse': adguardStatus === 'online',
                   'bg-red-500': adguardStatus === 'error',
@@ -762,14 +786,17 @@ const settings = reactive({
   mqtt_base_topic: 'network_scanner',
   mqtt_username: '',
   mqtt_password: '',
+  mqtt_enabled: true,
   openwrt_url: '',
   openwrt_username: '',
   openwrt_password: '',
   openwrt_interval: 15,
+  openwrt_enabled: true,
   adguard_url: '',
   adguard_username: '',
   adguard_password: '',
-  adguard_interval: 5
+  adguard_interval: 5,
+  adguard_enabled: true
 })
 
 const openWrtStatus = ref(null)
@@ -793,6 +820,7 @@ const fetchSettings = async () => {
       settings.mqtt_base_topic = mapping.mqtt_base_topic || 'network_scanner'
       settings.mqtt_username = mapping.mqtt_username || ''
       settings.mqtt_password = mapping.mqtt_password || ''
+      settings.mqtt_enabled = mapping.mqtt_enabled !== 'false'
       settings.last_discovery_run_at = mapping.last_discovery_run_at || ''
 
       try {
@@ -810,6 +838,7 @@ const fetchSettings = async () => {
         settings.openwrt_username = owRes.data.username
         settings.openwrt_password = owRes.data.password
         settings.openwrt_interval = owRes.data.interval
+        settings.openwrt_enabled = owRes.data.enabled !== false
         openWrtStatus.value = owRes.data.verified ? 'online' : null
       }
     } catch { }
@@ -822,6 +851,7 @@ const fetchSettings = async () => {
         settings.adguard_username = agRes.data.username
         settings.adguard_password = agRes.data.password
         settings.adguard_interval = agRes.data.interval
+        settings.adguard_enabled = agRes.data.enabled !== false
         adguardStatus.value = agRes.data.verified ? 'online' : null
       }
     } catch (e) {
@@ -1085,7 +1115,8 @@ const saveSettings = async () => {
         url: settings.openwrt_url,
         username: settings.openwrt_username,
         password: settings.openwrt_password,
-        interval: parseInt(settings.openwrt_interval) || 15
+        interval: parseInt(settings.openwrt_interval) || 15,
+        enabled: settings.openwrt_enabled
       })
       // Update status from backend auto-verification
       openWrtStatus.value = owRes.data.verified ? 'online' : null
@@ -1097,7 +1128,8 @@ const saveSettings = async () => {
         url: settings.adguard_url,
         username: settings.adguard_username,
         password: settings.adguard_password,
-        interval: parseInt(settings.adguard_interval) || 5
+        interval: parseInt(settings.adguard_interval) || 5,
+        enabled: settings.adguard_enabled
       })
       adguardStatus.value = agRes.data.verified ? 'online' : null
     }
@@ -1330,5 +1362,70 @@ onUnmounted(() => {
 
 .animate-progress-indeterminate {
   animation: progress-indeterminate 2.5s infinite ease-in-out;
+}
+
+.premium-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.premium-switch:hover {
+  background-color: rgba(248, 250, 252, 0.5);
+}
+
+.dark .premium-switch:hover {
+  background-color: rgba(15, 23, 42, 0.3);
+}
+
+.premium-switch-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8; /* slate-400 */
+  transition: color 0.2s;
+}
+
+.premium-switch:hover .premium-switch-label {
+  color: #475569; /* slate-600 */
+}
+
+.dark .premium-switch:hover .premium-switch-label {
+  color: #cbd5e1; /* slate-300 */
+}
+
+.premium-switch-slider {
+  width: 2.25rem; /* 36px */
+  height: 1.25rem; /* 20px */
+  background-color: #e2e8f0; /* slate-200 */
+  border-radius: 9999px;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .premium-switch-slider {
+  background-color: #334155; /* slate-700 */
+}
+
+.premium-switch-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1rem; /* 16px */
+  height: 1rem; /* 16px */
+  background-color: white;
+  border-radius: 9999px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+input:checked + .premium-switch-slider::after {
+  transform: translateX(1rem);
 }
 </style>

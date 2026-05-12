@@ -105,7 +105,7 @@ class AdguardClient:
             config = json.loads(row[0])
             
             # Check if enabled
-            if not force and not config.get("enabled", False):
+            if not force and not config.get("enabled", True):
                 logger.info("Adguard sync skipped: integration not enabled.")
                 log_task_event(
                     task_type="adguard_sync", 
