@@ -103,7 +103,7 @@
                     <div class="flex items-center gap-1.5 p-1 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/50 dark:border-slate-700/30">
                         <div class="hidden sm:flex items-center gap-1.5 px-3 h-9 rounded-lg border transition-colors duration-500"
                             :class="ws.connected.value ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'">
-                            <div class="w-1.5 h-1.5 rounded-full" :class="ws.connected.value ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'"></div>
+                            <Zap class="w-3.5 h-3.5" :class="{ 'animate-pulse': ws.connected.value }" />
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ ws.connected.value ? 'Live' : 'Offline' }}</span>
                         </div>
 
@@ -212,6 +212,8 @@ import {
     CheckCircle,
     AlertTriangle,
     ShieldAlert,
+    ScanSearch,
+    Zap,
     Share2 as Share2Icon,
     Router as RouterIcon,
     ShieldCheck as ShieldCheckIcon
@@ -271,6 +273,7 @@ const getIntegrationPulse = (key) => {
 const getEventIcon = (event) => {
     if (event.level === 'ERROR' || event.event_type === 'failed') return AlertTriangle
     if (event.level === 'WARNING') return AlertTriangle
+    if (event.task_type === 'audit') return ScanSearch
     if (event.event_type === 'completed') return CheckCircle
     if (event.event_type === 'security_alert') return ShieldAlert
     if (event.type === 'device') return event.event_type === 'status_changed' && event.message.includes('online') ? Wifi : WifiOff

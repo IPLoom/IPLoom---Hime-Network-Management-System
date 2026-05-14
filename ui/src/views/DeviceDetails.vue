@@ -27,7 +27,7 @@
       <div class="flex items-center gap-3">
         <button @click="runDeepScan" :disabled="isScanning" class="btn-action"
           v-tooltip="'Deep Port Audit (Scan top 1000 ports)'">
-          <component :is="isScanning ? Loader2 : Scan" class="w-5 h-5" :class="{ 'animate-spin': isScanning }" />
+          <component :is="isScanning ? Loader2 : ScanSearch" class="w-5 h-5" :class="{ 'animate-spin': isScanning }" />
         </button>
         <button @click="saveChanges"
           class="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
@@ -658,7 +658,7 @@
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import {
-  ArrowLeft, Loader2, Scan, Save, Search, ChevronDown, Activity, Terminal, ExternalLink, ShieldAlert, ShieldCheck,
+  ArrowLeft, Loader2, ScanSearch, Save, Search, ChevronDown, Activity, Terminal, ExternalLink, ShieldAlert, ShieldCheck,
   Wifi, WifiOff
 } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
