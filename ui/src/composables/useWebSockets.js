@@ -1,20 +1,24 @@
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { useNotifications } from './useNotifications'
+import { useIntegrationStore } from '@/stores/integrations'
+
+// Shared state (Singleton)
+const socket = ref(null)
+const connected = ref(false)
+const lastNotification = ref(null)
+let reconnectTimer = null
 
 export function useWebSockets() {
-  const socket = ref(null)
-  const connected = ref(false)
-  const lastNotification = ref(null)
   const { notifySuccess, notifyError, notifyInfo } = useNotifications()
-  let reconnectTimer = null
+  const integrationStore = useIntegrationStore()
 
   const connect = () => {
     const token = localStorage.getItem('token')
     if (!token) return
 
-    // Clear any existing connection
-    if (socket.value) {
-        socket.value.close()
+    // If already connecting or connected, don't start another
+    if (socket.value && (socket.value.readyState === WebSocket.OPEN || socket.value.readyState === WebSocket.CONNECTING)) {
+        return
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -34,6 +38,8 @@ export function useWebSockets() {
         const payload = JSON.parse(event.data)
         if (payload.type === 'notification') {
           handleNotification(payload.data)
+        } else if (payload.type === 'integration_status') {
+          handleIntegrationStatus(payload)
         }
       } catch (err) {
         console.error('Failed to parse WebSocket message', err)
@@ -56,18 +62,12 @@ export function useWebSockets() {
     lastNotification.value = data
     const { task_type, event_type, message, level } = data
 
-    // Map levels to notification types
     if (level === 'ERROR') {
       notifyError(message)
     } else if (level === 'WARNING') {
-      notifyInfo(message) // Or a specific warning toast if available
+      notifyInfo(message)
     } else {
-      // For specific event types, we can use different styles
-      if (event_type === 'new_device') {
-        notifySuccess(message)
-      } else if (event_type === 'status_changed') {
-        notifyInfo(message)
-      } else if (event_type === 'completed') {
+      if (event_type === 'new_device' || event_type === 'completed') {
         notifySuccess(message)
       } else {
         notifyInfo(message)
@@ -75,9 +75,21 @@ export function useWebSockets() {
     }
   }
 
+  const handleIntegrationStatus = (payload) => {
+    const { integration, data } = payload
+    if (integration === 'mqtt') {
+      integrationStore.mqttStatus = { ...integrationStore.mqttStatus, ...data }
+    } else if (integration === 'openwrt') {
+      integrationStore.openwrtStatus = { ...integrationStore.openwrtStatus, ...data }
+    } else if (integration === 'adguard') {
+      integrationStore.adguardStatus = { ...integrationStore.adguardStatus, ...data }
+    }
+  }
+
   const disconnect = () => {
     if (socket.value) {
       socket.value.close()
+      socket.value = null
     }
     clearTimeout(reconnectTimer)
   }
