@@ -311,6 +311,16 @@ import {
   Layers, ArrowDown, ArrowUp, Zap, HelpCircle, Lock, ShieldCheck, Search, Globe
 } from 'lucide-vue-next'
 import { formatRelativeTime, parseUTC } from '@/utils/date'
+import { useWebSockets } from '@/composables/useWebSockets'
+import { watch } from 'vue'
+
+const { lastNotification } = useWebSockets()
+
+watch(lastNotification, (notif) => {
+  if (notif && (notif.event_type === 'new_device' || notif.event_type === 'status_changed' || notif.event_type === 'completed')) {
+    fetchAllData()
+  }
+})
 
 const loading = ref(false)
 const globalStats = ref({

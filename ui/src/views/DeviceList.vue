@@ -464,6 +464,15 @@ const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, Chevr
 import { DateTime } from 'luxon'
 import { formatRelativeTime, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
+import { useWebSockets } from '@/composables/useWebSockets'
+
+const { lastNotification } = useWebSockets()
+
+watch(lastNotification, (notif) => {
+  if (notif && (notif.event_type === 'new_device' || notif.event_type === 'status_changed' || notif.event_type === 'completed')) {
+    fetchDevices()
+  }
+})
 
 const devices = ref([])
 const totalDevices = ref(0)

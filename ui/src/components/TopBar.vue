@@ -139,25 +139,24 @@
                                     <div v-else>
                                         <button v-for="event in notificationStore.events" :key="event.id"
                                             @click="goToEvent(event)" class="notif-item">
-                                            <div v-if="parseUTC(event.changed_at) > parseUTC(notificationStore.lastViewed)"
+                                            <div v-if="!event.read_at"
                                                 class="notif-indicator">
                                             </div>
                                             <div class="flex-shrink-0">
-                                                <div :class="event.status === 'online' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'"
+                                                <div :class="event.level === 'ERROR' ? 'bg-red-500/10 text-red-500' : (event.level === 'WARNING' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500')"
                                                     class="p-2 rounded-lg">
-                                                    <component :is="event.status === 'online' ? WifiIcon : WifiOffIcon"
+                                                    <component :is="getEventIcon(event)"
                                                         class="h-4 w-4" />
                                                 </div>
                                             </div>
                                             <div class="min-w-0">
                                                 <p
                                                     class="text-[11px] font-medium text-slate-900 dark:text-white leading-tight">
-                                                    <span class="font-bold">{{ event.display_name || event.ip }}</span>
-                                                    {{ event.status === 'online' ? 'joined the network' : 'disconnected'
-                                                    }}
+                                                    <span class="font-bold">{{ event.task_type || 'System' }}</span>:
+                                                    {{ event.message }}
                                                 </p>
                                                 <p class="text-[9px] text-slate-500 mt-1">{{
-                                                    formatRelativeTime(event.changed_at) }}</p>
+                                                    formatRelativeTime(event.created_at) }}</p>
                                             </div>
                                         </button>
                                     </div>
@@ -240,8 +239,15 @@ import {
     WifiOff,
     User as UserIcon,
     LogOut as LogOutIcon,
-    ChevronDown as ChevronDownIcon
+    ChevronDown as ChevronDownIcon,
+    Tv,
+    Printer,
+    Activity,
+    CheckCircle,
+    AlertTriangle,
+    ShieldAlert
 } from 'lucide-vue-next'
+import { useNotifications } from '@/composables/useNotifications'
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppLogo from './AppLogo.vue'
 import { useSearchStore } from '@/stores/search'
@@ -260,25 +266,29 @@ const showResults = ref(false)
 const showNotifications = ref(false)
 const showUserMenu = ref(false)
 
-let notificationTimer = null
-
 onMounted(() => {
-    notificationStore.fetchNotifications()
-    // Poll for new notifications every 30 seconds
-    notificationTimer = setInterval(() => {
-        notificationStore.fetchNotifications()
-    }, 30000)
+    notificationStore.fetchNotifications(true) // Fetch only unread for TopBar
+    notificationStore.fetchUnreadCount()
 })
 
-onUnmounted(() => {
-    if (notificationTimer) clearInterval(notificationTimer)
-})
+const getEventIcon = (event) => {
+    if (event.level === 'ERROR') return AlertTriangle
+    if (event.level === 'WARNING') return AlertTriangle
+    if (event.event_type === 'completed') return CheckCircle
+    if (event.event_type === 'failed') return AlertTriangle
+    if (event.event_type === 'security_alert') return ShieldAlert
+    if (event.type === 'device') return event.event_type === 'status_changed' && event.message.includes('online') ? Wifi : WifiOff
+    return Activity
+}
 
 const toggleNotifications = () => {
     showNotifications.value = !showNotifications.value
     if (showNotifications.value) {
         showResults.value = false
         showUserMenu.value = false
+        // Fetch latest unread when opening
+        notificationStore.fetchNotifications(true)
+        notificationStore.fetchUnreadCount()
     }
 }
 
@@ -287,13 +297,35 @@ const handleLogout = () => {
     router.push('/login')
 }
 
-const markAllAsRead = () => {
-    notificationStore.markAllAsRead()
+const markAllAsRead = async () => {
+    await notificationStore.markAllAsRead()
+    const { notifySuccess } = useNotifications()
+    notifySuccess('All notifications marked as read')
 }
 
-const goToEvent = (event) => {
+const goToEvent = async (event) => {
     showNotifications.value = false
-    router.push({ name: 'DeviceDetails', params: { id: event.device_id } })
+    
+    // Mark this specific notification as read if it isn't already
+    if (!event.read_at) {
+        try {
+            await notificationStore.markAsRead([event.id])
+        } catch (error) {
+            console.error('Failed to mark notification as read:', error)
+        }
+    }
+
+    // Try to find a device ID for navigation
+    // We standardized backend to put ID in target, but check details for safety
+    const deviceId = event.type === 'device' ? (event.target || event.details?.id) : null
+
+    if (deviceId && deviceId.length > 10) { // Simple UUID check
+        router.push({ name: 'DeviceDetails', params: { id: deviceId } })
+    } else if (event.task_type === 'scan') {
+        router.push('/logs')
+    } else if (event.task_type === 'adguard_sync' || event.task_type === 'openwrt_sync') {
+        router.push('/analytics')
+    }
 }
 
 // Custom directive for clicking outside dropdowns

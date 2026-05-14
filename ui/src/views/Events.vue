@@ -363,8 +363,17 @@ import * as LucideIcons from 'lucide-vue-next'
 const { RefreshCw, Search, Activity, ArrowRightCircle, X, Loader2, ZapOff, Inbox, ChevronDown, ChevronUp, Wifi, WifiOff, Filter } = LucideIcons
 import { getIcon } from '@/utils/icons'
 import { useNotifications } from '@/composables/useNotifications'
+import { useWebSockets } from '@/composables/useWebSockets'
 
 const { notifyError } = useNotifications()
+const { lastNotification } = useWebSockets()
+
+watch(lastNotification, (notif) => {
+  if (notif && (notif.event_type === 'new_device' || notif.event_type === 'status_changed' || notif.event_type === 'completed')) {
+    fetchData()
+    fetchStats()
+  }
+})
 
 // State
 const events = ref([])

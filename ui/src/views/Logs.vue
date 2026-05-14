@@ -322,9 +322,23 @@ import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import ScanHistoryTab from '@/components/ScanHistoryTab.vue'
 const { RefreshCw, Search, Filter, ChevronDown, Activity, Trash2, Cog, ShieldCheck, Router, Network, Radar } = LucideIcons
 import { useNotifications } from '@/composables/useNotifications'
+import { useWebSockets } from '@/composables/useWebSockets'
 import { formatDate } from '@/utils/date'
 
 const { notifySuccess, notifyError } = useNotifications()
+const { lastNotification } = useWebSockets()
+
+watch(lastNotification, (notif) => {
+    if (notif && (
+        currentTab.value === 'tasks' || 
+        notif.level === 'ERROR' || 
+        notif.level === 'WARNING' ||
+        ['started', 'completed', 'failed'].includes(notif.event_type)
+    )) {
+        fetchLogs()
+    }
+})
+
 const scanTabRef = ref<any>(null)
 
 interface LogRecord {
