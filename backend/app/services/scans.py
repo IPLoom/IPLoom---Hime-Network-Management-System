@@ -116,6 +116,13 @@ async def scan_ports(ip: str, ports: Optional[List[int]] = None) -> List[Dict[st
 
 async def scan_device(device_id: str, ip: str) -> List[Dict[str, Any]]:
     """Deep scan for a specific device."""
+    log_task_event(
+        task_type="audit", 
+        event_type="started", 
+        message=f"Starting deep security audit for {ip}", 
+        target=device_id
+    )
+    
     top_ports = list(range(1, 1025))
     found = await scan_ports(ip, top_ports)
     
@@ -134,6 +141,15 @@ async def scan_device(device_id: str, ip: str) -> List[Dict[str, Any]]:
             conn.close()
     
     await asyncio.to_thread(update_db)
+    
+    log_task_event(
+        task_type="audit", 
+        event_type="completed", 
+        message=f"Deep audit complete for {ip}. Found {len(found)} open ports.", 
+        target=device_id,
+        details={"open_ports": len(found)}
+    )
+    
     return found
 
 async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", options: Optional[Dict[str, Any]] = None):

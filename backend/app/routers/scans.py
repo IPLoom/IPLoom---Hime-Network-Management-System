@@ -194,8 +194,8 @@ async def get_scan(scan_id: str):
         created_at=row[5], started_at=row[6], finished_at=row[7], error_message=row[8]
     )
 
-@router.post("/device/{device_id}")
-async def trigger_device_scan(device_id: str):
+@router.post("/audit/{device_id}")
+async def trigger_device_audit(device_id: str):
     def get_details():
         conn = get_connection()
         try:
