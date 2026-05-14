@@ -29,11 +29,16 @@ export function useNotifications() {
     notify(message, 'error', duration)
   }
 
+  const notifyInfo = (message, duration = 3000) => {
+    notify(message, 'info', duration)
+  }
+
   return {
     notifications,
     notify,
     notifySuccess,
     notifyError,
+    notifyInfo,
     removeNotification
   }
 }

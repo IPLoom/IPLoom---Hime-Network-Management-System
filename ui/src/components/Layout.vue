@@ -84,10 +84,39 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import AppLogo from './AppLogo.vue'
 import TopBar from './TopBar.vue'
 import NotificationToast from './NotificationToast.vue'
+import { useWebSockets } from '@/composables/useWebSockets'
+import { useNotifications } from '@/composables/useNotifications'
+
+const { connect, lastNotification } = useWebSockets()
+const { notifyInfo, notifyError, notifySuccess } = useNotifications()
+
+import { useNotificationStore } from '@/stores/notifications'
+const notificationStore = useNotificationStore()
+
+watch(lastNotification, (notif) => {
+  if (notif) {
+    // Refresh history and unread count instantly
+    notificationStore.fetchNotifications()
+    notificationStore.fetchUnreadCount()
+
+    if (notif.level === 'ERROR') {
+      notifyError(notif.message)
+    } else if (notif.level === 'SUCCESS' || (notif.event_type === 'completed')) {
+      notifySuccess(notif.message)
+    } else {
+      notifyInfo(notif.message)
+    }
+  }
+})
+
+onMounted(() => {
+  connect()
+})
+
 import {
   HomeIcon,
   ComputerDesktopIcon,

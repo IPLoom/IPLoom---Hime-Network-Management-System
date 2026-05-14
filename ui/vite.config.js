@@ -20,6 +20,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         ws: true,
+      },
+      '/api/v1/notifications': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        ws: true,
       }
     }
   }

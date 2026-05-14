@@ -7,18 +7,16 @@ import api from '@/utils/api'
 export const useNotificationStore = defineStore('notifications', () => {
   const events = ref([])
   const isLoading = ref(false)
-  const lastViewed = ref(localStorage.getItem('hnms_notifications_last_viewed') || new Date(0).toISOString())
+  const unreadCount = ref(0)
 
-  const unreadCount = computed(() => {
-    const lastViewedDate = parseUTC(lastViewed.value)
-    return events.value.filter(event => parseUTC(event.changed_at) > lastViewedDate).length
-  })
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (unreadOnly = false) => {
     isLoading.value = true
     try {
-      const response = await api.get('/events/', {
-        params: { limit: 12 } // Fetch a few more
+      const response = await api.get('/notifications/', {
+        params: { 
+          limit: 12,
+          unread_only: unreadOnly
+        }
       })
       events.value = response.data
     } catch (error) {
@@ -28,18 +26,49 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
-  const markAllAsRead = () => {
-    const now = DateTime.now().toUTC().toISO()
-    lastViewed.value = now
-    localStorage.setItem('hnms_notifications_last_viewed', now)
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await api.get('/notifications/unread-count')
+      unreadCount.value = response.data.count
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error)
+    }
+  }
+
+  const markAsRead = async (notifIds) => {
+    try {
+      await api.post('/notifications/mark-read', { notif_ids: notifIds })
+      // Update local state by setting read_at
+      const now = DateTime.now().toISO()
+      events.value = events.value.map(e => 
+        notifIds.includes(e.id) ? { ...e, read_at: now } : e
+      )
+      // Recalculate unread count
+      await fetchUnreadCount()
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      await api.post('/notifications/mark-read', { all: true })
+      // Update local state immediately
+      const now = DateTime.now().toISO()
+      events.value = events.value.map(e => ({ ...e, read_at: now }))
+      unreadCount.value = 0
+    } catch (error) {
+      console.error('Failed to mark notifications as read:', error)
+    }
   }
 
   return {
     events,
     isLoading,
     unreadCount,
-    lastViewed,
     fetchNotifications,
+    fetchUnreadCount,
+    markAsRead,
     markAllAsRead
   }
 })
