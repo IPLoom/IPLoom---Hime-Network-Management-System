@@ -73,6 +73,18 @@ class MQTTManager:
             conn.execute("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('mqtt_status', ?, now())", [status])
             conn.execute("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('mqtt_error', ?, now())", [error or ""])
             conn.commit()
+            
+            # Broadcast update via WebSocket
+            from app.core.notifications import manager
+            manager.broadcast_sync({
+                "type": "integration_status",
+                "integration": "mqtt",
+                "data": {
+                    "status": status,
+                    "reachable": self.is_reachable,
+                    "error": error
+                }
+            })
         except Exception as e:
             logger.error(f"Failed to save MQTT status: {e}")
         finally:

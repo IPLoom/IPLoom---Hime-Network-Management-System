@@ -71,6 +71,15 @@ def save_config(config: AdguardConfig):
             ['adguard', json.dumps(data)]
         )
         commit(conn)
+
+        # Broadcast update
+        from app.core.notifications import manager
+        manager.broadcast_sync({
+            "type": "integration_status",
+            "integration": "adguard",
+            "data": { "verified": data["verified"], "error": data.get("error") }
+        })
+
         return {"status": "saved", "verified": data["verified"]}
     except Exception as e:
         logger.error(f"Failed to save Adguard config: {e}")

@@ -97,6 +97,14 @@ def verify_connection(creds: VerifyRequest):
         try:
             conn.execute("INSERT OR REPLACE INTO config (key, value) VALUES ('openwrt_verified', 'true')")
             conn.commit()
+            
+            # Broadcast update
+            from app.core.notifications import manager
+            manager.broadcast_sync({
+                "type": "integration_status",
+                "integration": "openwrt",
+                "data": { "verified": True }
+            })
         finally:
              conn.close()
 
@@ -107,6 +115,14 @@ def verify_connection(creds: VerifyRequest):
         try:
             conn.execute("INSERT OR REPLACE INTO config (key, value) VALUES ('openwrt_verified', 'false')")
             conn.commit()
+            
+            # Broadcast update
+            from app.core.notifications import manager
+            manager.broadcast_sync({
+                "type": "integration_status",
+                "integration": "openwrt",
+                "data": { "verified": False, "error": str(e) }
+            })
         finally:
             conn.close()
         raise HTTPException(status_code=400, detail=str(e))
