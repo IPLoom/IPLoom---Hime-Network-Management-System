@@ -387,6 +387,8 @@ async def run_scan_job(scan_id: str, target: str, scan_type: str = "arp", option
                 "id": d_id, "ip": d_ip, "mac": d_mac, "hostname": d_name, "vendor": d_vendor, 
                 "icon": d_icon, "status": "offline", "timestamp": utc_now().isoformat()
             })
+             # Notification (Phase 2)
+             log_task_event("discovery", "status_changed", f"Device went offline: {d_name or d_ip}", target=d_id, details={"ip": d_ip, "mac": d_mac, "status": "offline"})
 
         duration = int((time.time() - start_time) * 1000)
         logger.info(f"Scan job {scan_id} completed successfully. Found {len(processed_results)} devices.")

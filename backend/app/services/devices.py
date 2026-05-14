@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 
 from app.core.db import get_connection
 from app.services.mqtt import publish_device_online, publish_device_offline
+from app.core.task_logger import log_task_event
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,17 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
             new_devices_to_enrich = [] # (id, mac)
             online_notifications = [] # device_info dicts
             
+            new_count = 0
+            recovered_count = 0
+            last_new_device = None
+            last_recovered_device = None
+
             from app.services.classification import classify_device, get_vendor_locally
 
             for data in devices_data:
                 ip = data["ip"]
                 mac = data.get("mac")
                 hostname = data.get("hostname")
-                protocol = data.get("protocol", "tcp").lower()
                 ports = data.get("ports", [])
                 
                 device_id = None
@@ -135,6 +140,14 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 if mac:
                     new_devices_to_enrich.append((device_id, mac))
                 
+                # Collect stats for batched notifications
+                if is_new:
+                    new_count += 1
+                    last_new_device = {"ip": ip, "name": hostname or ip, "id": device_id}
+                elif old_status != 'online':
+                    recovered_count += 1
+                    last_recovered_device = {"ip": ip, "name": hostname or ip, "id": device_id}
+
                 # Always notify on discovery to ensure MQTT state (HA) stays fresh
                 dev_row = conn.execute("SELECT ip, mac, display_name, vendor, icon, device_type, ip_type, last_seen FROM devices WHERE id = ?", [device_id]).fetchone()
                 if dev_row:
@@ -143,6 +156,18 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                         "vendor": dev_row[3], "icon": dev_row[4], "device_type": dev_row[5],
                         "ip_type": dev_row[6], "last_seen": dev_row[7]
                     })
+
+            # Send batched notifications after processing all devices
+            if new_count == 1:
+                log_task_event("discovery", "new_device", f"New device discovered: {last_new_device['name']}", target=last_new_device['id'], details={"ip": last_new_device['ip']})
+            else:
+                log_task_event("discovery", "new_device", f"Discovered {new_count} new devices", details={"count": new_count})
+        
+            if recovered_count > 0:
+                if recovered_count == 1:
+                    log_task_event("discovery", "status_changed", f"Device is back online: {last_recovered_device['name']}", target=last_recovered_device['id'], details={"ip": last_recovered_device['ip'], "status": "online"})
+                else:
+                    log_task_event("discovery", "status_changed", f"{recovered_count} devices came back online", details={"count": recovered_count, "status": "online"})
 
             from app.core.db import commit
             commit()
@@ -165,7 +190,6 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
 
 async def record_status_change(conn, device_id: str, status: str, timestamp: datetime):
     # This remains for internal use if a connection is already open
-    # But let's make it robust in case it's called independently
     if not conn:
         def sync_record():
             c = get_connection()
@@ -180,7 +204,6 @@ async def record_status_change(conn, device_id: str, status: str, timestamp: dat
                 c.close()
         await asyncio.to_thread(sync_record)
     else:
-        # We assume the caller is in a thread or knows what they are doing
         conn.execute(
             "INSERT INTO device_status_history (id, device_id, status, changed_at) VALUES (?, ?, ?, ?)",
             [str(uuid4()), device_id, status, timestamp]
@@ -199,16 +222,12 @@ async def enrich_device(device_id: str, mac: str):
     mac = format_mac(mac)
     if not mac: return
 
-    # Check if we already have a vendor for this MAC address anywhere in the database to avoid redundant API calls
     def get_existing_vendor_by_mac():
         conn = get_connection()
         try:
-            # First try the current device
             row = conn.execute("SELECT vendor FROM devices WHERE id = ?", [device_id]).fetchone()
             if row and row[0] and row[0].lower() != "unknown":
                 return row[0]
-            
-            # Then try any other device with the same MAC
             row = conn.execute("SELECT vendor FROM devices WHERE mac = ? AND vendor IS NOT NULL AND vendor != 'unknown' LIMIT 1", [mac]).fetchone()
             return row[0] if row else None
         finally:
@@ -216,7 +235,6 @@ async def enrich_device(device_id: str, mac: str):
             
     existing_vendor = await asyncio.to_thread(get_existing_vendor_by_mac)
     if existing_vendor:
-        logger.debug(f"Skipping enrichment for {mac}, vendor already known from database: {existing_vendor}")
         vendor = existing_vendor
     else:
         vendor = get_vendor_locally(mac)
@@ -225,7 +243,6 @@ async def enrich_device(device_id: str, mac: str):
         from app.utilities.mac_lookup import get_vendor_from_api
         vendor = await get_vendor_from_api(mac)
 
-    # Fetch IP for fingerprinting
     def get_ip():
         conn = get_connection()
         try:
@@ -238,7 +255,6 @@ async def enrich_device(device_id: str, mac: str):
     if not ip: return
 
     if vendor:
-        # 1. Run HTTP Fingerprinting (New Modular Service)
         from app.services.fingerprinting import FingerprintService
         fingerprint = await FingerprintService.fingerprint_device(ip)
 
@@ -248,52 +264,31 @@ async def enrich_device(device_id: str, mac: str):
                 row = conn.execute("SELECT display_name, device_type, icon, attributes FROM devices WHERE id = ?", [device_id]).fetchone()
                 if row:
                     display_name, current_type, current_icon, old_attrs_json = row
-                    
                     new_type, new_icon = current_type, current_icon
                     new_display = display_name
-                    
                     try:
                         attrs = json.loads(old_attrs_json) if old_attrs_json else {}
                     except:
                         attrs = {}
                     attrs["vendor"] = vendor
-
                     if fingerprint:
-                        # Fingerprint is the highest source of truth for IoT devices,
-                        # but we still only update if the user hasn't set a custom name/type.
-                        
-                        # Only update type/icon if they are unknown or default
                         if not current_type or current_type == "unknown":
                             new_type = fingerprint["type"]
                         if not current_icon or current_icon == "help-circle":
                             new_icon = fingerprint["icon"]
-                        
-                        # Only update name if it's currently an IP or empty
                         if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
                             new_display = fingerprint["name"]
-                            
                         attrs["fingerprint_id"] = fingerprint["id"]
                         attrs["web_interface"] = fingerprint["url"]
                         if fingerprint.get("detected_title"):
                             attrs["web_title"] = fingerprint["detected_title"]
                     else:
-                        # Fallback to vendor-based classification
                         if not current_type or current_type == "unknown":
                             new_type, new_icon = classify_device(None, vendor)
-                        
                         if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
                              new_display = vendor
-
                     conn.execute(
-                        """
-                        UPDATE devices 
-                        SET vendor = COALESCE(vendor, ?),
-                            device_type = ?,
-                            icon = ?,
-                            display_name = ?,
-                            attributes = ?
-                        WHERE id = ?
-                        """,
+                        "UPDATE devices SET vendor = COALESCE(vendor, ?), device_type = ?, icon = ?, display_name = ?, attributes = ? WHERE id = ?",
                         [vendor, new_type, new_icon, new_display, json.dumps(attrs), device_id]
                     )
                     from app.core.db import commit
@@ -302,7 +297,6 @@ async def enrich_device(device_id: str, mac: str):
                 conn.close()
         await asyncio.to_thread(sync_update)
         
-        # Trigger MQTT update after enrichment
         def sync_notify():
             conn = get_connection()
             try:
@@ -324,7 +318,6 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
         try:
             row = conn.execute("SELECT id, ip, mac, name, display_name, device_type, vendor, icon, status, ip_type, first_seen, last_seen, is_trusted FROM devices WHERE id = ?", [device_id]).fetchone()
             if not row: return None
-            
             valid_cols = {'display_name', 'device_type', 'icon', 'attributes', 'ip_type', 'is_trusted', 'parent_id'}
             updates = []
             params = []
@@ -332,13 +325,11 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
                 if k in valid_cols and v is not None:
                     updates.append(f"{k} = ?")
                     params.append(v)
-            
             if updates:
                 params.append(device_id)
                 conn.execute(f"UPDATE devices SET {', '.join(updates)} WHERE id = ?", params)
                 from app.core.db import commit
                 commit()
-            
             updated = conn.execute("SELECT id, ip, mac, name, display_name, device_type, vendor, icon, status, ip_type, first_seen, last_seen, is_trusted FROM devices WHERE id = ?", [device_id]).fetchone()
             return updated
         finally:
@@ -346,19 +337,15 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
 
     updated = await asyncio.to_thread(sync_update)
     if not updated: return None
-    
-    if updated:
-        dev_info = {
-            "id": updated[0], "ip": updated[1], "mac": updated[2], "name": updated[3],
-            "display_name": updated[4], "device_type": updated[5], "vendor": updated[6],
-            "icon": updated[7], "status": updated[8], "ip_type": updated[9], "first_seen": updated[10], "last_seen": updated[11],
-            "is_trusted": updated[12]
-        }
-        # Trigger MQTT update on manual edit
-        await asyncio.to_thread(publish_device_online, {
-            "ip": dev_info["ip"], "mac": dev_info["mac"], "hostname": dev_info["display_name"],
-            "vendor": dev_info["vendor"], "icon": dev_info["icon"], "device_type": dev_info["device_type"],
-            "ip_type": dev_info["ip_type"], "last_seen": dev_info["last_seen"]
-        })
-        return dev_info
-    return None
+    dev_info = {
+        "id": updated[0], "ip": updated[1], "mac": updated[2], "name": updated[3],
+        "display_name": updated[4], "device_type": updated[5], "vendor": updated[6],
+        "icon": updated[7], "status": updated[8], "ip_type": updated[9], "first_seen": updated[10], "last_seen": updated[11],
+        "is_trusted": updated[12]
+    }
+    await asyncio.to_thread(publish_device_online, {
+        "ip": dev_info["ip"], "mac": dev_info["mac"], "hostname": dev_info["display_name"],
+        "vendor": dev_info["vendor"], "icon": dev_info["icon"], "device_type": dev_info["device_type"],
+        "ip_type": dev_info["ip_type"], "last_seen": dev_info["last_seen"]
+    })
+    return dev_info
