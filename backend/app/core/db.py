@@ -33,6 +33,8 @@ def get_connection() -> duckdb.DuckDBPyConnection:
             _shared_conn.execute("SET threads TO 4")
             _shared_conn.execute("SET memory_limit = '512MB'")
             _shared_conn.execute("SET TimeZone='UTC'")
+            # Persistent settings for consistency
+            _shared_conn.execute("PRAGMA checkpoint_threshold='10MB'")
         
         # Return a cursor based on the master connection
         return _shared_conn.cursor()
@@ -262,6 +264,24 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # 7. Unified Notifications Table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            task_type TEXT,
+            event_type TEXT,
+            message TEXT NOT NULL,
+            level TEXT NOT NULL,
+            target TEXT,
+            details JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            read_at TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON notifications(read_at)")
 
     commit()
 

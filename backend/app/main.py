@@ -54,6 +54,9 @@ def cleanup_stale_scans():
 
 @app.on_event("startup")
 async def on_startup():
+    from app.core.notifications import manager
+    manager.set_loop(asyncio.get_running_loop())
+    
     await asyncio.to_thread(init_db)
     await asyncio.to_thread(cleanup_stale_scans)
     
@@ -113,6 +116,9 @@ app.include_router(task_events_router, prefix="/api/v1/task-events", tags=["task
 from app.routers.topology import router as topology_router
 app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"], dependencies=[Depends(get_current_user)])
 app.include_router(system_router, prefix="/api/v1/system", tags=["system"], dependencies=[Depends(get_current_user)])
+
+from app.routers.notifications import router as notifications_router
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 
 
 
