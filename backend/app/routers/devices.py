@@ -65,7 +65,7 @@ async def _internal_list_devices(
             # Now fetch the data
             base_sql = """
                 SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon
+                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked
                 FROM devices
             """
             if clauses:
@@ -130,6 +130,7 @@ async def _internal_list_devices(
                     is_trusted=r[14] if r[14] is not None else False,
                     brand=r[15] if len(r) > 15 else None,
                     brand_icon=r[16] if len(r) > 16 else None,
+                    is_blocked=r[17] if len(r) > 17 and r[17] is not None else False,
                     traffic_history=traffic_map.get(r[0], [])
                 )
                 for r in rows
@@ -180,7 +181,7 @@ async def get_device(device_id: str):
             row = conn.execute(
                 """
                 SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon
+                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked
                 FROM devices WHERE id = ?
                 """,
                 [device_id],
@@ -210,6 +211,7 @@ async def get_device(device_id: str):
                 is_trusted=row[14] if row[14] is not None else False,
                 brand=row[15] if len(row) > 15 else None,
                 brand_icon=row[16] if len(row) > 16 else None,
+                is_blocked=row[17] if len(row) > 17 and row[17] is not None else False,
                 traffic_history=traffic
             )
         finally:

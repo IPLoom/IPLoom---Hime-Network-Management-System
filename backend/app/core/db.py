@@ -143,6 +143,10 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
         print("Migration: Adding 'missing_count' column to 'devices'")
         conn.execute("ALTER TABLE devices ADD COLUMN missing_count INTEGER DEFAULT 0")
 
+    if 'is_blocked' not in col_names:
+        print("Migration: Adding 'is_blocked' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE")
+
     # Ensure device_status_history table exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS device_status_history (
@@ -351,10 +355,14 @@ def seed_custom_assets(conn: duckdb.DuckDBPyConnection) -> None:
         ]
         
         for asset_id, name, asset_type in initial_brands:
-            # Check if already seeded
-            exists = conn.execute("SELECT 1 FROM custom_assets WHERE id = ?", [asset_id]).fetchone()
+            # Check if already seeded in DB
+            exists = conn.execute("SELECT path FROM custom_assets WHERE id = ?", [asset_id]).fetchone()
             if exists:
-                continue
+                # Also verify the file exists on disk
+                db_path = exists[0]
+                filename = db_path.split('/')[-1]
+                if (brand_dir / filename).exists():
+                    continue
 
             # Search for the icon file by asset_id with any supported extension
             src = None
@@ -377,7 +385,7 @@ def seed_custom_assets(conn: duckdb.DuckDBPyConnection) -> None:
 
             path = f"/static/brand_icons/{dest_filename}"
             conn.execute(
-                "INSERT INTO custom_assets (id, name, type, path) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO custom_assets (id, name, type, path) VALUES (?, ?, ?, ?)",
                 [asset_id, name, asset_type, path]
             )
             print(f"Seeded brand icon: {name} ({dest_filename})")

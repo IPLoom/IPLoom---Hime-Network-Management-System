@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS devices (
     ip_type       TEXT,
     open_ports    TEXT,
     attributes    TEXT,
-    parent_id     TEXT
+    parent_id     TEXT,
+    is_blocked    BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS device_status_history (
