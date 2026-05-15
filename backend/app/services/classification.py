@@ -288,8 +288,8 @@ def identify_brand(text: str) -> Dict[str, Optional[str]]:
     assets = get_custom_assets()
     brand_asset = assets.get(brand_id)
     
-    # Fallback to local static asset if it exists (assuming naming convention)
-    brand_icon = brand_asset["path"] if brand_asset else f"/static/brand_icons/{brand_id}.svg"
+    # Only return brand_icon if it exists in assets (seeded or uploaded)
+    brand_icon = brand_asset["path"] if brand_asset else None
     
     return {
         "brand": brand_id.capitalize(),

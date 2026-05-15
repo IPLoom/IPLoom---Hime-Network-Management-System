@@ -322,39 +322,66 @@ def seed_custom_assets(conn: duckdb.DuckDBPyConnection) -> None:
         brand_dir = assets_dir / "brand_icons"
         brand_dir.mkdir(parents=True, exist_ok=True)
 
-        # Source directory for initial icons (from UI public folder)
-        # Assuming backend is in App/backend and UI is in App/ui
-        ui_public_brand = Path(__file__).parent.parent.parent.parent / "ui" / "public" / "brand"
-        
-        # Format: (id, name, type, filename)
+        # Source directory for seed icons.
+        # In Docker: baked into image at /app/seed/brand (primary)
+        # In development: relative path from source tree (fallback)
+        docker_seed_path = Path("/app/seed/brand")
+        dev_seed_path = Path(__file__).parent.parent.parent.parent / "ui" / "public" / "brand"
+        seed_dir = docker_seed_path if docker_seed_path.exists() else dev_seed_path
+        print(f"Brand icon seed source: {seed_dir}")
+
+        # Format: (id, name, type) - filename is resolved by searching for any supported extension
         initial_brands = [
-            ("adguard", "AdGuard Home", "brand", "adguard.png"),
-            ("openwrt", "OpenWrt", "brand", "openwrt.png"),
-            ("mqtt", "MQTT", "brand", "mqtt.png"),
+            ("adguard",      "AdGuard Home",    "brand"),
+            ("openwrt",      "OpenWrt",          "brand"),
+            ("mqtt",         "MQTT",             "brand"),
+            ("apple",        "Apple",            "brand"),
+            ("google",       "Google",           "brand"),
+            ("amazon",       "Amazon",           "brand"),
+            ("microsoft",    "Microsoft",        "brand"),
+            ("raspberry",    "Raspberry Pi",     "brand"),
+            ("ubiquiti",     "Ubiquiti / UniFi", "brand"),
+            ("synology",     "Synology",         "brand"),
+            ("tplink",       "TP-Link",          "brand"),
+            ("philips",      "Philips Hue",      "brand"),
+            ("esphome",      "ESPHome",          "brand"),
+            ("tasmota",      "Tasmota",          "brand"),
+            ("homeassistant","Home Assistant",   "brand"),
+            ("sonos",        "Sonos",            "brand"),
         ]
         
-        for asset_id, name, asset_type, filename in initial_brands:
+        for asset_id, name, asset_type in initial_brands:
             # Check if already seeded
             exists = conn.execute("SELECT 1 FROM custom_assets WHERE id = ?", [asset_id]).fetchone()
             if exists:
                 continue
 
-            src = ui_public_brand / filename
-            dest = brand_dir / filename
-            
-            # Copy file to persistent storage if it exists in source
-            if src.exists():
-                shutil.copy2(src, dest)
-                path = f"/static/brand_icons/{filename}"
-                
-                conn.execute(
-                    "INSERT INTO custom_assets (id, name, type, path) VALUES (?, ?, ?, ?)",
-                    [asset_id, name, asset_type, path]
-                )
-                print(f"Seeded asset: {name}")
-            else:
-                print(f"Warning: Source icon {src} not found, skipping seed for {name}")
-                
+            # Search for the icon file by asset_id with any supported extension
+            src = None
+            found_ext = None
+            for ext in [".svg", ".png", ".jpg", ".jpeg"]:
+                candidate = seed_dir / (asset_id + ext)
+                if candidate.exists():
+                    src = candidate
+                    found_ext = ext
+                    break
+
+            if not src:
+                print(f"Skipping seed for '{name}': No icon found in {seed_dir}")
+                continue
+
+            # Copy to persistent storage (Docker volume)
+            dest_filename = f"{asset_id}{found_ext}"
+            dest = brand_dir / dest_filename
+            shutil.copy2(src, dest)
+
+            path = f"/static/brand_icons/{dest_filename}"
+            conn.execute(
+                "INSERT INTO custom_assets (id, name, type, path) VALUES (?, ?, ?, ?)",
+                [asset_id, name, asset_type, path]
+            )
+            print(f"Seeded brand icon: {name} ({dest_filename})")
+
     except Exception as e:
         print(f"Error seeding assets: {e}")
 

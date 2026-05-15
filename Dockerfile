@@ -17,8 +17,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY backend/.env .env
 
-# Copy pre-built frontend assets to backend's static directory
+# Copy pre-built frontend assets to nginx static directory
 COPY ui/dist ./static
+
+# Copy curated brand icons seed directory into the image
+# These are copied to the persistent /data/assets volume on first startup by seed_custom_assets()
+COPY ui/public/brand ./seed/brand
 
 # Copy Configuration files
 COPY backend/nginx.conf /etc/nginx/nginx.conf
@@ -30,7 +34,8 @@ EXPOSE 80 8000
 # Environment variables (overridable)
 ENV DB_PATH=/data/final_scanner.duckdb \
     DB_SCHEMA_PATH=app/schema.sql \
-    DB_INIT_MODE=create
+    DB_INIT_MODE=create \
+    ASSETS_DIR=/data/assets
 
 # Create volume mount point for database
 VOLUME ["/data"]
