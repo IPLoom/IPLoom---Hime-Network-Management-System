@@ -62,6 +62,12 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
+  const addNotification = (notif) => {
+    // Add to the beginning of the list
+    events.value = [notif, ...events.value].slice(0, 50)
+    unreadCount.value++
+  }
+
   return {
     events,
     isLoading,
@@ -69,6 +75,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     fetchNotifications,
     fetchUnreadCount,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    addNotification
   }
 })

@@ -97,22 +97,6 @@ const { notifyInfo, notifyError, notifySuccess } = useNotifications()
 import { useNotificationStore } from '@/stores/notifications'
 const notificationStore = useNotificationStore()
 
-watch(lastNotification, (notif) => {
-  if (notif) {
-    // Refresh history and unread count instantly
-    notificationStore.fetchNotifications()
-    notificationStore.fetchUnreadCount()
-
-    if (notif.level === 'ERROR') {
-      notifyError(notif.message)
-    } else if (notif.level === 'SUCCESS' || (notif.event_type === 'completed')) {
-      notifySuccess(notif.message)
-    } else {
-      notifyInfo(notif.message)
-    }
-  }
-})
-
 onMounted(() => {
   connect()
 })

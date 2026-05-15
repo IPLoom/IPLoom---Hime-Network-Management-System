@@ -132,6 +132,35 @@ class OpenWRTClient:
                 })
         return leases
 
+    def get_wireless_devices(self):
+        """Get wireless associations using luci-rpc.getWirelessDevices"""
+        res = self._call("luci-rpc", "getWirelessDevices", optional=True)
+        
+        associations = {}
+        if isinstance(res, dict):
+            for interface, data in res.items():
+                if not isinstance(data, dict): continue
+                
+                # Infer band from frequency or interface name
+                freq = str(data.get("frequency", "")).lower()
+                band = "2.4GHz" if "2.4" in freq else ("5GHz" if "5" in freq or "6" in freq else "Unknown")
+                ssid = data.get("ssid", "Unknown")
+                
+                assoc_list = data.get("associations", [])
+                for assoc in assoc_list:
+                    mac = assoc.get("mac", "").lower()
+                    if mac:
+                        associations[mac] = {
+                            "rssi": assoc.get("signal"),
+                            "noise": assoc.get("noise"),
+                            "rx_rate": assoc.get("rx_rate"),
+                            "tx_rate": assoc.get("tx_rate"),
+                            "band": band,
+                            "ssid": ssid,
+                            "interface": interface
+                        }
+        return associations
+
     def get_traffic_stats(self):
         """Get traffic data and calculate deltas using /usr/sbin/nlbw"""
         stats = {}
@@ -222,6 +251,7 @@ class OpenWRTClient:
             self.login()
             
             leases = self.get_dhcp_leases()
+            wireless_assoc = self.get_wireless_devices()
             traffic_data = self.get_traffic_stats()
             traffic_deltas = traffic_data["deltas"]
             traffic_totals = traffic_data["totals"]
@@ -236,9 +266,10 @@ class OpenWRTClient:
                     if l.get("mac"):
                         dhcp_map[l["mac"].lower()] = l
 
-                # 2. Get set of ALL MACs involved (Traffic + DHCP)
+                # 2. Get set of ALL MACs involved (Traffic + DHCP + Wireless)
                 all_macs = set(dhcp_map.keys())
                 all_macs.update(traffic_totals.keys())
+                all_macs.update(wireless_assoc.keys())
 
                 for mac in all_macs:
                     mac = mac.lower()
@@ -307,6 +338,21 @@ class OpenWRTClient:
                     name = existing_name or hostname or f"Device-{mac[-5:]}"
                     
                     attrs["last_sync"] = "openwrt"
+                    
+                    # Add Wireless Details
+                    wlan = wireless_assoc.get(mac)
+                    if wlan:
+                        attrs["wlan_rssi"] = wlan["rssi"]
+                        attrs["wlan_band"] = wlan["band"]
+                        attrs["wlan_ssid"] = wlan["ssid"]
+                        attrs["wlan_rx_rate"] = wlan["rx_rate"]
+                        attrs["wlan_tx_rate"] = wlan["tx_rate"]
+                        # Also flag as wireless
+                        attrs["connection_type"] = "wireless"
+                    elif lease:
+                        # If in DHCP but not in wireless associations, it might be wired
+                        # (Or it's just not currently active in association table)
+                        attrs["connection_type"] = "wired"
                     
                     # Insert into history (Always record traffic if available)
                     if t_total["down"] > 0 or t_total["up"] > 0:

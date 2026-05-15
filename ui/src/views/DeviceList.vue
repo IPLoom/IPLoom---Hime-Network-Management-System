@@ -230,6 +230,12 @@
                           v-tooltip="`${device.dns_stats.blocked} blocked queries`">
                           <ShieldAlert class="h-3 w-3" /> DNS
                         </span>
+                        <!-- Wireless Indicator -->
+                        <span v-if="device.attributes?.connection_type === 'wireless'"
+                          class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 border border-blue-100 dark:border-blue-800 flex items-center gap-1"
+                          v-tooltip="`Connected to ${device.attributes.wlan_ssid} (${device.attributes.wlan_rssi} dBm)`">
+                          <Wifi class="h-3 w-3" /> {{ device.attributes.wlan_band }}
+                        </span>
                         <!-- Firewall Blocked Indicator -->
                         <span v-if="device.is_blocked"
                           class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center gap-1"

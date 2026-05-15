@@ -435,6 +435,74 @@
 
         </div>
       </div>
+      
+      <!-- Wireless Link Status (Only for wireless devices) -->
+      <div v-if="form.attributes?.connection_type === 'wireless'" class="premium-card !p-4 group border-blue-500/20 bg-blue-500/5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 lg:divide-x divide-blue-500/10">
+          
+          <!-- Signal Strength -->
+          <div class="px-6 py-2 first:pl-0 lg:px-8">
+            <div class="flex items-center gap-4">
+              <div class="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg">
+                <Wifi class="w-4 h-4" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Signal (RSSI)</div>
+                <div class="flex items-center gap-2">
+                  <div class="text-xs font-bold text-slate-900 dark:text-white">{{ form.attributes?.wlan_rssi }} dBm</div>
+                  <div class="flex gap-0.5 h-2 items-end">
+                    <div class="w-0.5 rounded-full bg-current" :class="form.attributes?.wlan_rssi > -90 ? 'h-1' : 'h-1 opacity-20'"></div>
+                    <div class="w-0.5 rounded-full bg-current" :class="form.attributes?.wlan_rssi > -80 ? 'h-1.5' : 'h-1.5 opacity-20'"></div>
+                    <div class="w-0.5 rounded-full bg-current" :class="form.attributes?.wlan_rssi > -70 ? 'h-2' : 'h-2 opacity-20'"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Band -->
+          <div class="px-6 py-2 lg:px-8">
+            <div class="flex items-center gap-4">
+              <div class="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                <Radio class="w-4 h-4" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Band</div>
+                <div class="text-xs font-bold text-slate-900 dark:text-white">{{ form.attributes?.wlan_band }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SSID -->
+          <div class="px-6 py-2 lg:px-8">
+            <div class="flex items-center gap-4">
+              <div class="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                <Network class="w-4 h-4" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Network (SSID)</div>
+                <div class="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[120px]">{{ form.attributes?.wlan_ssid }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Speed -->
+          <div class="px-6 py-2 lg:px-8 last:pr-0">
+            <div class="flex items-center gap-4">
+              <div class="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg">
+                <Activity class="w-4 h-4" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Link Rate</div>
+                <div class="text-xs font-bold text-slate-900 dark:text-white">
+                  {{ (form.attributes?.wlan_tx_rate / 1000).toFixed(0) }} <span class="text-[10px] opacity-60">Mbps</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
 
         <!-- Availability Trend Chart -->
         <div class="premium-card">
@@ -813,7 +881,7 @@ import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import {
   ArrowLeft, Loader2, ScanSearch, Save, Search, ChevronDown, Activity, Terminal, ExternalLink, ShieldAlert, ShieldCheck,
-  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check, Ban
+  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check, Ban, Radio, Network
 } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
