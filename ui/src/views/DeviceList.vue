@@ -192,7 +192,8 @@
                     <div class="relative">
                       <div
                         class="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg group-hover:bg-white dark:group-hover:bg-slate-600 transition-colors">
-                        <component :is="getIcon(device.icon || 'help-circle')"
+                        <img v-if="device.icon && device.icon.startsWith('/static/')" :src="device.icon" class="h-5 w-5 object-contain" />
+                        <component v-else :is="getIcon(device.icon || 'help-circle')"
                           class="h-5 w-5 text-slate-600 dark:text-slate-400" />
                       </div>
                       <span
@@ -200,10 +201,12 @@
                         :class="getDeviceStatusColor(device)"></span>
                     </div>
                     <div class="min-w-0">
-                      <div
-                        class="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {{ device.display_name ||
-                          'Unnamed Device' }}</div>
+                        <div class="flex items-center gap-1.5 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <img v-if="device.brand_icon" :src="device.brand_icon" class="w-4 h-4 object-contain rounded-sm" />
+                          <span class="text-sm font-medium text-slate-900 dark:text-white truncate">
+                            {{ device.display_name || 'Unnamed Device' }}
+                          </span>
+                        </div>
                       <div class="flex flex-wrap items-center gap-2">
                         <div class="text-xs text-slate-500 font-mono">{{ device.ip }}</div>
                         <span v-if="device.ip_type"
@@ -518,9 +521,13 @@ const tableHeaders = [
   { key: 'last_seen', label: 'Last Seen', class: 'hidden md:table-cell w-1/12' },
 ]
 
+import { useSystemStore } from '@/stores/system'
+const systemStore = useSystemStore()
+
 const deviceTypes = computed(() => {
-  return ['Smartphone', 'Tablet', 'Laptop', 'Desktop', 'Server', 'Router', 'IoT', 'Printer', 'TV', 'Other']
+  return systemStore.deviceTypes
 })
+
 
 const getSortIcon = (key) => {
   if (sortBy.value !== key) return ArrowUpDown

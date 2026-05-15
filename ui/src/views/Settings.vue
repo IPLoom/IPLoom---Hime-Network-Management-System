@@ -465,6 +465,60 @@
           </button>
         </div>
 
+        <!-- Brand & Device Assets -->
+        <div class="glass-panel">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
+                <Tag class="w-4 h-4" />
+              </div>
+              <div>
+                <h2 class="text-sm font-bold text-slate-900 dark:text-white">Assets</h2>
+                <p class="text-[10px] text-slate-500">Custom brand & device icons</p>
+              </div>
+            </div>
+            <button @click="openUploadModal('brand')" 
+              class="group relative flex items-center gap-2.5 px-5 py-2.5 bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl transition-all shadow-lg shadow-indigo-200 dark:shadow-indigo-900/40 hover:shadow-indigo-400/30 active:scale-95 overflow-hidden"
+              v-tooltip="'Add New Branding or Device Icon'"
+            >
+              <div class="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <Plus class="w-4 h-4 group-hover:rotate-90 transition-transform duration-500 relative z-10" />
+              <span class="text-xs font-black uppercase tracking-[0.1em] relative z-10">Add Asset</span>
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div v-if="assetsLoading" class="flex justify-center py-4">
+              <Loader2 class="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+            <div v-else-if="assets.length > 0" class="grid grid-cols-5 gap-3 max-h-48 overflow-y-auto custom-scrollbar p-1">
+              <div v-for="asset in assets" :key="asset.id" 
+                class="group relative aspect-square bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-2.5 flex items-center justify-center shadow-sm hover:shadow-md hover:border-indigo-500/50 transition-all duration-300"
+              >
+                <img :src="asset.path" class="max-w-full max-h-full object-contain" :alt="asset.name" v-tooltip="asset.name" />
+                
+                <!-- Hover Overlay -->
+                <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 rounded-2xl flex items-center justify-center">
+                  <button @click="deleteAsset(asset.id)" 
+                    class="p-2 bg-white/10 hover:bg-red-500 text-white rounded-xl transition-all hover:scale-110 active:scale-90"
+                    v-tooltip="'Delete Asset'"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <!-- Type Badge -->
+                <div class="absolute -top-1.5 -right-1.5 px-2 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm group-hover:bg-indigo-500 group-hover:text-white group-hover:border-indigo-400 transition-colors">
+                  {{ asset.type === 'brand' ? 'Brand' : 'Device' }}
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-center py-6 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+              <p class="text-[10px] text-slate-400 italic">Empty Asset Library</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Database Management -->
         <div class="glass-panel">
           <div class="flex items-center gap-3 mb-4">
@@ -765,6 +819,13 @@
     </div>
   </div>
 
+  <!-- Asset Upload Modal -->
+  <AssetUploadModal 
+    :is-open="isUploadModalOpen" 
+    :type="uploadType" 
+    @close="isUploadModalOpen = false" 
+    @uploaded="fetchAssets" 
+  />
 </template>
 
 <script setup>
@@ -775,6 +836,7 @@ import { Save, RotateCcw, Trash2, AlertTriangle, Loader2, Plus, Fingerprint, Pen
 
 import { useNotifications } from '@/composables/useNotifications'
 import { formatDate } from '@/utils/date'
+import AssetUploadModal from '@/components/AssetUploadModal.vue'
 
 const settings = reactive({
   scan_subnets: '[]',
@@ -907,7 +969,7 @@ const deviceTypes = [
   'TV/Entertainment', 'IoT Device', 'Smart Bulb', 'Smart Plug/Switch',
   'Microcontroller', 'Security Camera', 'Sensor', 'Audio/Speaker',
   'Streaming Device', 'Printer', 'NAS/Storage', 'Game Console',
-  'Media Server', 'Home Automation', 'Server Admin', 'Generic'
+  'Media Server', 'Home Automation', 'Generic'
 ]
 
 const availableIcons = [
@@ -1198,6 +1260,11 @@ const openConfirmation = (type) => {
     confirmModal.message = 'This will replace your current database with the selected backup. The application will restart and current unsaved progress will be lost.'
     confirmModal.confirmText = 'Yes, Restore and Restart'
     confirmModal.confirmClass = 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500'
+  } else if (type === 'delete_asset') {
+    confirmModal.title = 'Delete Asset?'
+    confirmModal.message = 'Are you sure you want to permanently delete this custom asset? This icon will no longer be visible on associated devices.'
+    confirmModal.confirmText = 'Delete Asset'
+    confirmModal.confirmClass = 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
   }
 }
 
@@ -1262,6 +1329,12 @@ const confirmAction = async () => {
         // Reset file input so user can try again
         if (restoreFileInput.value) restoreFileInput.value.value = ''
       }
+    } else if (confirmModal.type === 'delete_asset') {
+      if (!assetToDelete.value) return
+      await api.delete(`/assets/${assetToDelete.value}`)
+      notifySuccess('Asset deleted')
+      fetchAssets()
+      assetToDelete.value = null
     }
   } catch (e) {
     console.error(e)
@@ -1330,11 +1403,43 @@ const formatLastRun = (dateStr) => {
   return formatDate(dateStr)
 }
 
-onMounted(() => {
-  fetchSettings()
-  fetchGist()
-  fetchMqttStatus()
-  fetchRules()
+const assets = ref([])
+const assetsLoading = ref(false)
+const isUploadModalOpen = ref(false)
+const uploadType = ref('brand')
+
+const fetchAssets = async () => {
+  assetsLoading.value = true
+  try {
+    const res = await api.get('/assets')
+    assets.value = res.data
+  } catch (e) {
+    console.error('Failed to fetch assets:', e)
+  } finally {
+    assetsLoading.value = false
+  }
+}
+
+const openUploadModal = (type) => {
+  uploadType.value = type
+  isUploadModalOpen.value = true
+}
+
+const assetToDelete = ref(null)
+
+const deleteAsset = (id) => {
+  assetToDelete.value = id
+  openConfirmation('delete_asset')
+}
+
+onMounted(async () => {
+  await Promise.all([
+    fetchSettings(),
+    fetchGist(),
+    fetchMqttStatus(),
+    fetchRules(),
+    fetchAssets()
+  ])
 
   // Start polling MQTT status every 10 seconds
   mqttPollTimer = setInterval(fetchMqttStatus, 10000)

@@ -61,10 +61,12 @@
               <div class="flex items-center gap-4">
                 <div class="p-3 rounded-xl shadow-sm transition-colors"
                      :class="device.is_new ? 'bg-blue-500 text-white shadow-blue-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'">
-                  <component :is="getIcon(device.is_new ? 'plus' : 'monitor')" class="w-5 h-5" />
+                  <img v-if="device.icon && device.icon.startsWith('/static/')" :src="device.icon" class="w-5 h-5 object-contain" />
+                  <component v-else :is="getIcon(device.icon || 'monitor')" class="w-5 h-5" />
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
+                    <img v-if="device.brand_icon" :src="device.brand_icon" class="w-4 h-4 object-contain" />
                     <h4 class="text-sm font-black text-slate-900 dark:text-white truncate max-w-[200px]">
                       {{ device.hostname || 'Unknown Device' }}
                     </h4>

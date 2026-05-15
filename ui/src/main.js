@@ -18,9 +18,14 @@ app.use(VNetworkGraph)
 app.directive('tooltip', tooltip)
 app.directive('click-outside', clickOutside)
 
-// Initialize auth store
+// Initialize stores
 import { useAuthStore } from './stores/authStore'
+import { useSystemStore } from './stores/system.js'
+
 const authStore = useAuthStore()
+const systemStore = useSystemStore()
+
 authStore.init()
+systemStore.fetchConstants()
 
 app.mount('#app')

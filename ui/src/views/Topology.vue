@@ -176,7 +176,8 @@
                         class="pointer-events-none transition-opacity"
                         :class="{ 'opacity-20': isDimmed(nodes[nodeId]) }">
                         <div class="flex items-center justify-center h-full w-full text-white">
-                            <component :is="getIcon(nodes[nodeId].icon)" :size="(nodes[nodeId].isPort ? 12 : 20) * 1.2"
+                            <img v-if="nodes[nodeId].icon && nodes[nodeId].icon.startsWith('/static/')" :src="nodes[nodeId].icon" class="w-[80%] h-[80%] object-contain" />
+                            <component v-else :is="getIcon(nodes[nodeId].icon)" :size="(nodes[nodeId].isPort ? 12 : 20) * 1.2"
                                 stroke-width="2" />
                         </div>
                     </foreignObject>
@@ -202,8 +203,9 @@
                     class="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 w-[calc(100%-32px)] sm:w-80 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl p-4 sm:p-5 z-20 max-h-[60%] overflow-y-auto">
                     <div class="flex items-start justify-between mb-4">
                         <div class="flex items-center gap-4">
-                            <div class="p-3 rounded-2xl text-white shadow-lg shrink-0" :style="{ backgroundColor: getNodeColor(selectedNode) }">
-                                <component :is="getIcon(selectedNode.icon)" class="w-6 h-6" />
+                            <div class="p-3 rounded-2xl text-white shadow-lg shrink-0 overflow-hidden" :style="{ backgroundColor: getNodeColor(selectedNode) }">
+                                <img v-if="selectedNode.icon && selectedNode.icon.startsWith('/static/')" :src="selectedNode.icon" class="w-6 h-6 object-contain" />
+                                <component v-else :is="getIcon(selectedNode.icon)" class="w-6 h-6" />
                             </div>
                             <div class="min-w-0">
                                 <h3 class="text-base font-black text-slate-900 dark:text-white truncate">
