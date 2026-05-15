@@ -2,7 +2,8 @@
 from fastapi import FastAPI
 import asyncio
 import logging
-from app.core.db import init_db
+import signal
+from app.core.db import init_db, commit, close_shared_connection
 from app.routers.config import router as config_router, public_router as config_public_router
 from app.routers.scans import router as scans_router
 from app.routers.devices import router as devices_router
@@ -53,19 +54,58 @@ def cleanup_stale_scans():
     finally:
         conn.close()
 
+async def periodic_checkpoint(interval_seconds: int = 600):
+    """Runs a CHECKPOINT on the shared DuckDB connection every `interval_seconds` (default: 10 min)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            from app.core.db import get_connection, get_db_lock
+            with get_db_lock():
+                conn = get_connection()
+                conn.execute("CHECKPOINT")
+                conn.close()
+            logger.info("DB checkpoint completed (periodic).")
+        except Exception as e:
+            logger.warning(f"Periodic DB checkpoint failed: {e}")
+
+def run_shutdown_checkpoint():
+    """Performs a final CHECKPOINT and closes the shared connection cleanly."""
+    try:
+        from app.core.db import get_connection, get_db_lock
+        with get_db_lock():
+            conn = get_connection()
+            conn.execute("CHECKPOINT")
+            conn.close()
+        logger.info("DB checkpoint completed (shutdown).")
+    except Exception as e:
+        logger.warning(f"Shutdown DB checkpoint failed: {e}")
+    finally:
+        close_shared_connection()
+
+def _handle_signal(sig, frame):
+    """Signal handler for SIGTERM/SIGINT — checkpoints DB before process exits."""
+    logger.info(f"Received signal {sig}, running shutdown checkpoint...")
+    run_shutdown_checkpoint()
+    raise SystemExit(0)
+
 @app.on_event("startup")
 async def on_startup():
     from app.core.notifications import manager
     manager.set_loop(asyncio.get_running_loop())
-    
+
+    # Register OS-level signal handlers for Docker stop (SIGTERM) and Ctrl+C (SIGINT)
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
     await asyncio.to_thread(init_db)
     await asyncio.to_thread(cleanup_stale_scans)
-    
+
     # OUI downloader was permanently removed due to high CPU usage on Raspberry Pi.
     # Vendor identification now relies on hardcoded COMMON_OUIS and on-demand API enrichment.
-    
+
     asyncio.create_task(scheduler_loop())
     asyncio.create_task(scan_runner_loop())
+    asyncio.create_task(periodic_checkpoint(interval_seconds=600))  # every 10 min
 
     # Run network discovery and cache results for onboarding ONLY if not configured
     from app.core.db import get_connection
@@ -81,6 +121,12 @@ async def on_startup():
         asyncio.create_task(DiscoveryService.run_and_cache())
     else:
         logger.info("Skipping background network discovery: Subnets already configured.")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    """FastAPI graceful shutdown — final checkpoint before the event loop stops."""
+    logger.info("FastAPI shutdown event: running final DB checkpoint...")
+    await asyncio.to_thread(run_shutdown_checkpoint)
     
 from app.routers.auth import router as auth_router
 from app.core.auth import get_current_user
