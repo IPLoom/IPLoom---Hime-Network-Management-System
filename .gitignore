@@ -11,3 +11,12 @@ __pycache__/
 *.pyc
 backend/mqtt_debug.log
 iploom_deploy.tar.gz
+
+# Runtime-generated static assets (user uploads, seeded icons)
+backend/app/static/brand_icons/*
+backend/app/static/device_icons/*
+!backend/app/static/brand_icons/.gitkeep
+!backend/app/static/device_icons/.gitkeep
+
+# Curated brand icons source (tracked - these are project assets)
+# ui/public/brand/ is intentionally NOT ignored
