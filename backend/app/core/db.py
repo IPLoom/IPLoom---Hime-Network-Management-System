@@ -352,6 +352,8 @@ def seed_custom_assets(conn: duckdb.DuckDBPyConnection) -> None:
             ("tasmota",      "Tasmota",          "brand"),
             ("homeassistant","Home Assistant",   "brand"),
             ("sonos",        "Sonos",            "brand"),
+            ("sonoff",       "Sonoff",           "brand"),
+            ("shelly",       "Shelly",           "brand"),
         ]
         
         for asset_id, name, asset_type in initial_brands:
