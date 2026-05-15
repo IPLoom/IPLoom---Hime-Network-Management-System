@@ -164,15 +164,6 @@ def _get_openwrt_client(conn):
     conf = json.loads(row[0])
     return OpenWRTClient(conf["url"], conf["username"], conf["password"])
 
-@router.get("/temp_pass")
-def get_temp_pass():
-    conn = get_connection()
-    try:
-        row = conn.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
-        return json.loads(row[0])
-    finally:
-        conn.close()
-
 @router.post("/devices/{mac}/block")
 def block_device_endpoint(mac: str):
     if not mac or mac.lower() in ['unknown', 'n/a']:
