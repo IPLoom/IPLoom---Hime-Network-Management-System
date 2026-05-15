@@ -426,7 +426,6 @@ class OpenWRTClient:
                 
         except Exception as e:
             logger.error(f"OpenWRT Sync Failed: {e}", exc_info=True)
-            with open("debug_sync.log", "a") as f: f.write(f"Sync Exception: {e}\n")
             
             log_task_event(
                 task_type="openwrt_sync", 
@@ -442,7 +441,8 @@ class OpenWRTClient:
     def block_device(self, mac: str):
         """Block a device by MAC address using OpenWrt firewall (uci)."""
         logger.info(f"OpenWRT: Blocking device {mac}")
-        sanitized_mac = mac.replace(':', '').lower()
+        mac = mac.lower()
+        sanitized_mac = mac.replace(':', '')
         rule_name = f"block_{sanitized_mac}"
         
         # Create the section if it doesn't exist
@@ -453,7 +453,8 @@ class OpenWRTClient:
         }, optional=True)
         
         # Update the named firewall rule section
-        res = self._call("uci", "set", {
+        # Using DROP and ensuring both IPv4/IPv6 coverage
+        self._call("uci", "set", {
             "config": "firewall",
             "type": "rule",
             "section": rule_name,
@@ -462,22 +463,54 @@ class OpenWRTClient:
                 "src": "lan",
                 "dest": "wan",
                 "src_mac": mac,
-                "target": "REJECT"
+                "target": "DROP",
+                "enabled": "1"
             }
         }, optional=False)
         
         # Commit the changes
         self._call("uci", "commit", {"config": "firewall"}, optional=False)
         
-        # Apply changes (OpenWrt >= 21.02 natively uses uci apply)
-        self._call("uci", "apply", {"timeout": 10, "rollback": False}, optional=True)
+        # Move rule to top of the list to ensure it overrides 'Allow Established' logic
+        self._call("file", "exec", {
+            "command": "/sbin/uci",
+            "params": ["insert", f"firewall.{rule_name}=0"]
+        }, optional=True)
+        self._call("uci", "commit", {"config": "firewall"}, optional=True)
+
+        # Reload firewall for immediate effect on new connections
+        # We use reload instead of apply to be more aggressive with ruleset rebuild
+        self._call("file", "exec", {
+            "command": "/etc/init.d/firewall",
+            "params": ["reload"]
+        }, optional=True)
+
+        # CRITICAL: Flush established connections for this device
+        # Otherwise streaming/existing sessions continue until timeout
+        try:
+            leases = self.get_dhcp_leases()
+            ip = next((l["ip"] for l in leases if l["mac"].lower() == mac.lower()), None)
+            if ip:
+                logger.info(f"OpenWRT: Flushing conntrack for IP {ip}")
+                # Clear all states where this IP is source or destination
+                self._call("file", "exec", {
+                    "command": "/usr/sbin/conntrack",
+                    "params": ["-D", "-s", ip]
+                }, optional=True)
+                self._call("file", "exec", {
+                    "command": "/usr/sbin/conntrack",
+                    "params": ["-D", "-d", ip]
+                }, optional=True)
+        except Exception as e:
+            logger.warning(f"Could not flush conntrack for {mac}: {e}")
         
-        return res
+        return True
 
     def unblock_device(self, mac: str):
         """Unblock a device by MAC address using OpenWrt firewall (uci)."""
         logger.info(f"OpenWRT: Unblocking device {mac}")
-        sanitized_mac = mac.replace(':', '').lower()
+        mac = mac.lower()
+        sanitized_mac = mac.replace(':', '')
         rule_name = f"block_{sanitized_mac}"
         
         # Delete the section
@@ -489,8 +522,11 @@ class OpenWRTClient:
         # Commit the changes
         self._call("uci", "commit", {"config": "firewall"}, optional=True)
         
-        # Apply changes
-        self._call("uci", "apply", {"timeout": 10, "rollback": False}, optional=True)
+        # Reload firewall
+        self._call("file", "exec", {
+            "command": "/etc/init.d/firewall",
+            "params": ["reload"]
+        }, optional=True)
         
         return res
 
