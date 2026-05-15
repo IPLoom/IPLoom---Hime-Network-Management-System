@@ -19,6 +19,9 @@ class DeviceRead(BaseModel):
     open_ports: Optional[list] = []
     attributes: Optional[dict] = {}
     traffic_history: Optional[list] = [] # List of {down: int, up: int, timestamp: datetime}
+    brand: Optional[str] = None
+    brand_icon: Optional[str] = None
+    parent_id: Optional[str] = None
 
 class DeviceUpdate(BaseModel):
     name: Optional[str] = None
@@ -29,6 +32,10 @@ class DeviceUpdate(BaseModel):
     ip_type: Optional[str] = None
     is_trusted: Optional[bool] = None
     attributes: Optional[dict] = None
+    brand: Optional[str] = None
+    brand_icon: Optional[str] = None
+    parent_id: Optional[str] = None
+    open_ports: Optional[list] = None
 
 class PaginatedDevicesResponse(BaseModel):
     items: list[DeviceRead]

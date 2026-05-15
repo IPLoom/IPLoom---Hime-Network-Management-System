@@ -17,7 +17,7 @@
         "ports": [
             8006
         ],
-        "device_type": "Server Admin",
+        "device_type": "Server",
         "icon": "settings",
         "priority": 10
     },
@@ -29,7 +29,7 @@
             53,
             80
         ],
-        "device_type": "Server Admin",
+        "device_type": "Server",
         "icon": "shield-check",
         "priority": 15
     },
@@ -42,7 +42,7 @@
             80,
             443
         ],
-        "device_type": "Server Admin",
+        "device_type": "Server",
         "icon": "shield-check",
         "priority": 15
     },

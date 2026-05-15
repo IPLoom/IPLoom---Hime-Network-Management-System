@@ -65,7 +65,7 @@ async def _internal_list_devices(
             # Now fetch the data
             base_sql = """
                 SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted
+                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon
                 FROM devices
             """
             if clauses:
@@ -128,6 +128,8 @@ async def _internal_list_devices(
                     ip_type=r[12],
                     attributes=json.loads(r[13]) if r[13] else {},
                     is_trusted=r[14] if r[14] is not None else False,
+                    brand=r[15] if len(r) > 15 else None,
+                    brand_icon=r[16] if len(r) > 16 else None,
                     traffic_history=traffic_map.get(r[0], [])
                 )
                 for r in rows
@@ -178,7 +180,7 @@ async def get_device(device_id: str):
             row = conn.execute(
                 """
                 SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted
+                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon
                 FROM devices WHERE id = ?
                 """,
                 [device_id],
@@ -206,6 +208,8 @@ async def get_device(device_id: str):
                 ip_type=row[12],
                 attributes=json.loads(row[13]) if row[13] else {},
                 is_trusted=row[14] if row[14] is not None else False,
+                brand=row[15] if len(row) > 15 else None,
+                brand_icon=row[16] if len(row) > 16 else None,
                 traffic_history=traffic
             )
         finally:
@@ -216,7 +220,7 @@ async def get_device(device_id: str):
 
 @router.patch("/{device_id}", response_model=DeviceRead)
 async def update_device_by_patch(device_id: str, update_data: DeviceUpdate):
-    fields = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    fields = update_data.model_dump(exclude_unset=True)
     if not fields: raise HTTPException(status_code=400, detail="No fields provided for update")
     
     # If attributes is a dict, stringify it for the service/DB

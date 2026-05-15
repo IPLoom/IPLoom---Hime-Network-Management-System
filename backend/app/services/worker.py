@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from app.core.date_utils import now as utc_now, parse_iso_utc
 import json
 from app.core.db import get_connection
-from app.services.scans import run_scan_job, discover_network_scapy
+from app.services.scans import run_scan_job
 from app.core.task_logger import log_task_event
 import time
 

@@ -15,6 +15,7 @@ from app.routers.classification import router as classification_router
 from app.routers.openwrt import router as openwrt_router
 from app.routers.analytics import router as analytics_router
 from app.routers.system import router as system_router
+from app.routers.assets import router as assets_router
 
 
 from app.core.logging import setup_logging
@@ -88,6 +89,20 @@ from fastapi import Depends
 from app.routers.topology import router as topology_router
 from app.routers.discovery import router as discovery_router
 
+# Mount static files for assets from persistent data directory
+from fastapi.staticfiles import StaticFiles
+from app.core.config import get_settings
+from pathlib import Path
+settings = get_settings()
+
+# Ensure directory exists before mounting to avoid startup crash
+assets_path = Path(settings.assets_dir)
+assets_path.mkdir(parents=True, exist_ok=True)
+(assets_path / "brand_icons").mkdir(parents=True, exist_ok=True)
+(assets_path / "device_icons").mkdir(parents=True, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=settings.assets_dir), name="static")
+
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(config_public_router, prefix="/api/v1/config", tags=["config"])
 app.include_router(config_router, prefix="/api/v1/config", tags=["config"], dependencies=[Depends(get_current_user)])
@@ -112,11 +127,11 @@ app.include_router(logs_router, prefix="/api/v1/logs", tags=["logs"], dependenci
 
 from app.routers.task_events import router as task_events_router
 app.include_router(task_events_router, prefix="/api/v1/task-events", tags=["task-events"], dependencies=[Depends(get_current_user)])
-
-from app.routers.topology import router as topology_router
-app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"], dependencies=[Depends(get_current_user)])
 app.include_router(system_router, prefix="/api/v1/system", tags=["system"], dependencies=[Depends(get_current_user)])
+app.include_router(assets_router, prefix="/api/v1/assets", tags=["assets"], dependencies=[Depends(get_current_user)])
 
+
+app.include_router(topology_router, prefix="/api/v1/topology", tags=["topology"], dependencies=[Depends(get_current_user)])
 from app.routers.notifications import router as notifications_router
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 

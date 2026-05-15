@@ -1,4 +1,7 @@
 import duckdb
+import shutil
+import json
+import uuid
 from pathlib import Path
 from app.core.config import get_settings
 import logging
@@ -99,6 +102,7 @@ def init_db() -> None:
 
 def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
     """Adds missing columns to existing tables."""
+    settings = get_settings()
     # Check if vendor/icon exist in devices
     cols = conn.execute("PRAGMA table_info('devices')").fetchall()
     col_names = [c[1] for c in cols]
@@ -282,8 +286,77 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON notifications(read_at)")
+    
+    # Ensure custom_assets table exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS custom_assets (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            type        TEXT NOT NULL, -- 'brand' or 'device'
+            path        TEXT NOT NULL,
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
 
+    # Add brand columns to devices if they don't exist
+    try:
+        conn.execute("ALTER TABLE devices ADD COLUMN brand TEXT")
+    except: pass
+    try:
+        conn.execute("ALTER TABLE devices ADD COLUMN brand_icon TEXT")
+    except: pass
+
+    # Ensure asset directories exist
+    assets_dir = Path(settings.assets_dir)
+    (assets_dir / "brand_icons").mkdir(parents=True, exist_ok=True)
+    (assets_dir / "device_icons").mkdir(parents=True, exist_ok=True)
+
+    seed_custom_assets(conn)
     commit()
+
+def seed_custom_assets(conn: duckdb.DuckDBPyConnection) -> None:
+    """Seeds the custom_assets table with default brand mappings and copies files."""
+    try:
+        settings = get_settings()
+        assets_dir = Path(settings.assets_dir)
+        brand_dir = assets_dir / "brand_icons"
+        brand_dir.mkdir(parents=True, exist_ok=True)
+
+        # Source directory for initial icons (from UI public folder)
+        # Assuming backend is in App/backend and UI is in App/ui
+        ui_public_brand = Path(__file__).parent.parent.parent.parent / "ui" / "public" / "brand"
+        
+        # Format: (id, name, type, filename)
+        initial_brands = [
+            ("adguard", "AdGuard Home", "brand", "adguard.png"),
+            ("openwrt", "OpenWrt", "brand", "openwrt.png"),
+            ("mqtt", "MQTT", "brand", "mqtt.png"),
+        ]
+        
+        for asset_id, name, asset_type, filename in initial_brands:
+            # Check if already seeded
+            exists = conn.execute("SELECT 1 FROM custom_assets WHERE id = ?", [asset_id]).fetchone()
+            if exists:
+                continue
+
+            src = ui_public_brand / filename
+            dest = brand_dir / filename
+            
+            # Copy file to persistent storage if it exists in source
+            if src.exists():
+                shutil.copy2(src, dest)
+                path = f"/static/brand_icons/{filename}"
+                
+                conn.execute(
+                    "INSERT INTO custom_assets (id, name, type, path) VALUES (?, ?, ?, ?)",
+                    [asset_id, name, asset_type, path]
+                )
+                print(f"Seeded asset: {name}")
+            else:
+                print(f"Warning: Source icon {src} not found, skipping seed for {name}")
+                
+    except Exception as e:
+        print(f"Error seeding assets: {e}")
 
 def seed_classification_rules(conn: duckdb.DuckDBPyConnection) -> None:
     """Seeds the classification_rules table from initial_rules.json if empty."""
@@ -293,9 +366,6 @@ def seed_classification_rules(conn: duckdb.DuckDBPyConnection) -> None:
             return
 
         print("Seeding initial classification rules...")
-        import json
-        import uuid
-        from pathlib import Path
         
         rules_path = Path(__file__).parent.parent / "core" / "initial_rules.json"
         if not rules_path.exists():

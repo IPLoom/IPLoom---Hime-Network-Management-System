@@ -36,14 +36,12 @@ class DiscoveryService:
     async def rapid_scan_v2():
         """
         Ultra-fast network scanner that identifies NEW devices vs known ones.
-        1. Detects subnet.
-        2. Performs high-speed ping sweep.
-        3. Cross-references with DB.
-        4. Returns enriched list.
+        Uses modular scanners for Layer 2/3 discovery.
         """
-        logger.info("Starting Rapid Discovery Scan v2...")
+        logger.info("Starting Modular Rapid Discovery Scan v2...")
         
         # 1. Detect Subnet
+        from app.services.scans import resolve_hostname
         interfaces = psutil.net_if_addrs()
         target_network = None
         for iface, addrs in interfaces.items():
@@ -57,11 +55,7 @@ class DiscoveryService:
                             break
             if target_network: break
         
-        if not target_network:
-            target_network = ipaddress.IPv4Network("192.168.1.0/24")
-
-        ips = [str(h) for h in target_network.hosts()]
-        logger.info(f"Scanning {len(ips)} IPs in {target_network}")
+        target_str = str(target_network) if target_network else "192.168.1.0/24"
 
         # 2. Fetch Known Devices
         def get_known():
@@ -74,96 +68,54 @@ class DiscoveryService:
         
         known_devices = await asyncio.to_thread(get_known)
 
-        # 3. High-Speed Ping Sweep
-        semaphore = asyncio.Semaphore(100)
-        async def ping_ip(ip):
-            async with semaphore:
-                try:
-                    cmd = ["ping", "-n", "1", "-w", "500", ip] if sys.platform == "win32" else ["ping", "-c", "1", "-W", "1", ip]
-                    proc = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    await proc.wait()
-                    if proc.returncode == 0:
-                        # Found someone! Get MAC
-                        mac = await DiscoveryService._get_mac(ip)
-                        return {"ip": ip, "mac": mac}
-                except:
-                    pass
-                return None
-
-        results = await asyncio.gather(*(ping_ip(ip) for ip in ips))
-        found = [r for r in results if r]
+        # 3. Modular Discovery
+        from app.services.scanners import ARPScanner, PingScanner
+        arp_scanner = ARPScanner()
+        ping_scanner = PingScanner()
         
+        arp_res = await arp_scanner.scan(target_str)
+        ping_res = await ping_scanner.scan(target_str)
+        
+        # Merge
+        found_map = {d["ip"]: d for d in arp_res}
+        for p in ping_res:
+            if p["ip"] not in found_map: found_map[p["ip"]] = p
+            elif p.get("mac") and p["mac"] != "unknown" and found_map[p["ip"]].get("mac") == "unknown":
+                found_map[p["ip"]]["mac"] = p["mac"]
+
         # 4. Enrichment & Classification
+        from app.services.classification import classify_device, get_vendor_locally
         enriched = []
-        for dev in found:
-            ip = dev["ip"]
-            mac = dev["mac"]
+        for dev in found_map.values():
+            ip, mac = dev["ip"], dev.get("mac", "unknown")
             
             status = "NEW"
             known_info = known_devices.get(mac)
-            
             if known_info:
-                if known_info["ip"] == ip:
-                    status = "KNOWN"
-                else:
-                    status = "MOVED"
+                status = "KNOWN" if known_info["ip"] == ip else "MOVED"
             
-            # Basic Hostname resolve
-            hostname = "unknown"
-            try:
-                def resolve():
-                    try: return socket.gethostbyaddr(ip)[0]
-                    except: return "unknown"
-                hostname = await asyncio.to_thread(resolve)
-            except: pass
+            hostname = await resolve_hostname(ip)
+            vendor = get_vendor_locally(mac) or "Unknown"
+            
+            # Rapid classification (no ports/titles here)
+            classification = classify_device(hostname, vendor, [])
 
             enriched.append({
                 "ip": ip,
                 "mac": mac,
-                "hostname": hostname if hostname != "unknown" else (known_info["name"] if known_info else "unknown"),
+                "hostname": hostname or (known_info["name"] if known_info else "unknown"),
                 "status": status,
                 "is_new": status == "NEW",
-                "vendor": await DiscoveryService._get_vendor(mac)
+                "vendor": vendor,
+                "device_type": classification["type"],
+                "icon": classification["icon"],
+                "brand": classification.get("brand"),
+                "brand_icon": classification.get("brand_icon")
             })
 
         logger.info(f"Rapid Scan complete. Found {len(enriched)} devices.")
         return sorted(enriched, key=lambda x: (x["status"] != "NEW", x["ip"]))
 
-    @staticmethod
-    async def _get_mac(ip):
-        """Helper to get MAC from ARP cache."""
-        try:
-            def sync_arp():
-                try:
-                    cmd = ["arp", "-a", ip]
-                    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=2).decode()
-                    match = re.search(r"(([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2}))", output)
-                    if match:
-                        return match.group(1).replace('-', ':').lower()
-                except: pass
-                return "unknown"
-            return await asyncio.to_thread(sync_arp)
-        except:
-            return "unknown"
-
-    @staticmethod
-    async def _get_vendor(mac):
-        """Simple vendor lookup from prefix."""
-        if not mac or mac == "unknown": return "Unknown"
-        prefix = mac.replace(':', '').upper()[:6]
-        # Very limited list for rapid scan fallback
-        COMMON_OUIS = {
-            "000C29": "VMware",
-            "005056": "VMware",
-            "B827EB": "Raspberry Pi",
-            "DC2632": "Raspberry Pi",
-            "E45F01": "Raspberry Pi",
-            "001788": "Philips Hue",
-            "ACCF23": "Hi-Flying",
-            "D83B0E": "Apple",
-            "C0FFEE": "Custom Device"
-        }
-        return COMMON_OUIS.get(prefix, "Network Device")
 
     @staticmethod
     async def _async_verify_http(url, service_type, timeout=3.0):

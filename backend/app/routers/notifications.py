@@ -7,6 +7,7 @@ from jose import jwt, JWTError
 from typing import List, Optional, Dict, Any
 import logging
 import asyncio
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ async def get_unread_count():
             conn.close()
     return await asyncio.to_thread(query)
 
-from pydantic import BaseModel
+
 
 class MarkReadRequest(BaseModel):
     notif_ids: Optional[List[str]] = None

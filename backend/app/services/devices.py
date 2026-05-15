@@ -14,6 +14,34 @@ from app.core.task_logger import log_task_event
 
 logger = logging.getLogger(__name__)
 
+# Standard columns for device SELECTs
+DEVICE_COLUMNS = "id, ip, mac, name, display_name, device_type, first_seen, last_seen, vendor, icon, status, ip_type, open_ports, attributes, is_trusted, brand, brand_icon, parent_id"
+
+def row_to_dict(row):
+    if not row: return None
+    # id(0), ip(1), mac(2), name(3), display_name(4), device_type(5), first_seen(6), last_seen(7), vendor(8), icon(9), status(10), ip_type(11), open_ports(12), attributes(13), is_trusted(14), brand(15), brand_icon(16), parent_id(17)
+    d = {
+        "id": row[0],
+        "ip": row[1],
+        "mac": row[2],
+        "name": row[3],
+        "display_name": row[4],
+        "device_type": row[5],
+        "first_seen": row[6],
+        "last_seen": row[7],
+        "vendor": row[8],
+        "icon": row[9],
+        "status": row[10],
+        "ip_type": row[11],
+        "open_ports": json.loads(row[12]) if row[12] and isinstance(row[12], str) else (row[12] if row[12] else []),
+        "attributes": json.loads(row[13]) if row[13] and isinstance(row[13], str) else (row[13] if row[13] else {}),
+        "is_trusted": bool(row[14])
+    }
+    if len(row) > 15: d["brand"] = row[15]
+    if len(row) > 16: d["brand_icon"] = row[16]
+    if len(row) > 17: d["parent_id"] = row[17]
+    return d
+
 async def upsert_device_from_scan(
     ip: str,
     mac: Optional[str],
@@ -56,15 +84,16 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 device_id = None
                 existing_device = None
                 
+                # Optimized: Fetch all necessary fields in one go
                 if mac and mac.lower() != "unknown":
                     existing_device = conn.execute(
-                        "SELECT id, first_seen, last_seen, ip, ip_type, attributes, status FROM devices WHERE mac = ?", 
+                        f"SELECT {DEVICE_COLUMNS} FROM devices WHERE mac = ?", 
                         [mac]
                     ).fetchone()
                 
                 if not existing_device:
                     existing_device = conn.execute(
-                        "SELECT id, first_seen, last_seen, ip, ip_type, attributes, status FROM devices WHERE ip = ?", 
+                        f"SELECT {DEVICE_COLUMNS} FROM devices WHERE ip = ?", 
                         [ip]
                     ).fetchone()
 
@@ -72,35 +101,65 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 old_status = 'unknown'
                 
                 port_numbers = [p["port"] for p in ports]
-                guessed_type, guessed_icon = classify_device(hostname, None, port_numbers)
+                classification = classify_device(hostname, None, port_numbers, page_title=data.get("page_title"))
+                guessed_type = classification["type"]
+                guessed_icon = classification["icon"]
+                guessed_brand = classification.get("brand")
+                guessed_brand_icon = classification.get("brand_icon")
 
                 if existing_device:
-                    device_id, first_seen, last_seen, old_ip, old_ip_type, attributes_raw, old_status = existing_device
-                    conn.execute(
-                        """
-                        UPDATE devices
-                        SET last_seen = ?,
-                            ip = ?,
-                            mac = COALESCE(?, mac),
-                            name = COALESCE(name, ?),
-                            device_type = COALESCE(device_type, ?),
-                            icon = COALESCE(icon, ?),
-                            open_ports = ?,
-                            status = ?,
-                            missing_count = 0
-                        WHERE id = ?
-                        """,
-                        [now, ip, mac, hostname, guessed_type, guessed_icon, json.dumps(ports), 'online', device_id]
-                    )
+                    # Map the row using our standard helper
+                    dev = row_to_dict(existing_device)
+                    device_id = dev["id"]
+                    is_trusted = dev["is_trusted"]
+                    old_status = dev["status"]
+                    
+                    if is_trusted:
+                        # Only update telemetry/status for trusted devices
+                        conn.execute(
+                            "UPDATE devices SET last_seen = ?, ip = ?, mac = COALESCE(?, mac), open_ports = ?, status = 'online', missing_count = 0 WHERE id = ?",
+                            [now, ip, mac, json.dumps(ports), device_id]
+                        )
+                        final_name = dev["display_name"] or dev["name"]
+                        final_type = dev["device_type"]
+                        final_icon = dev["icon"]
+                        final_brand = dev["brand"]
+                        final_brand_icon = dev["brand_icon"]
+                    else:
+                        # Update metadata for non-trusted devices if we have better info
+                        final_icon = dev["icon"] if (dev["icon"] and dev["icon"] != 'help-circle') else guessed_icon
+                        final_type = dev["device_type"] if (dev["device_type"] and dev["device_type"] != 'unknown') else guessed_type
+                        final_brand = dev["brand"] if dev["brand"] else guessed_brand
+                        final_brand_icon = dev["brand_icon"] if dev["brand_icon"] else guessed_brand_icon
+                        final_name = dev["name"] if dev["name"] else hostname
+                        
+                        conn.execute(
+                            """
+                            UPDATE devices
+                            SET last_seen = ?,
+                                ip = ?,
+                                mac = COALESCE(?, mac),
+                                name = ?,
+                                device_type = ?,
+                                icon = ?,
+                                brand = ?,
+                                brand_icon = ?,
+                                open_ports = ?,
+                                status = ?,
+                                missing_count = 0
+                            WHERE id = ?
+                            """,
+                            [now, ip, mac, final_name, final_type, final_icon, final_brand, final_brand_icon, json.dumps(ports), 'online', device_id]
+                        )
                 else:
                     is_new = True
                     device_id = str(uuid4())
                     conn.execute(
                         """
-                        INSERT INTO devices (id, ip, mac, name, display_name, device_type, icon, ip_type, open_ports, first_seen, last_seen, attributes, status, missing_count)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        INSERT INTO devices (id, ip, mac, name, display_name, device_type, icon, brand, brand_icon, ip_type, open_ports, first_seen, last_seen, attributes, status, missing_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', 0)
                         """,
-                        [device_id, ip, mac, hostname, hostname or ip, guessed_type, guessed_icon, data.get("ip_type"), json.dumps(ports), now, now, "{}", 'online']
+                        [device_id, ip, mac, hostname, hostname or ip, guessed_type, guessed_icon, guessed_brand, guessed_brand_icon, data.get("ip_type"), json.dumps(ports), now, now, "{}"]
                     )
 
                 # Record status change if needed
@@ -149,12 +208,20 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                     last_recovered_device = {"ip": ip, "name": hostname or ip, "id": device_id}
 
                 # Always notify on discovery to ensure MQTT state (HA) stays fresh
-                dev_row = conn.execute("SELECT ip, mac, display_name, vendor, icon, device_type, ip_type, last_seen FROM devices WHERE id = ?", [device_id]).fetchone()
+                dev_row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
                 if dev_row:
+                    dev_data = row_to_dict(dev_row)
                     online_notifications.append({
-                        "ip": dev_row[0], "mac": dev_row[1], "hostname": dev_row[2], 
-                        "vendor": dev_row[3], "icon": dev_row[4], "device_type": dev_row[5],
-                        "ip_type": dev_row[6], "last_seen": dev_row[7]
+                        "ip": dev_data["ip"], 
+                        "mac": dev_data["mac"], 
+                        "hostname": dev_data["display_name"] or dev_data["name"], 
+                        "vendor": dev_data["vendor"], 
+                        "icon": dev_data["icon"], 
+                        "device_type": dev_data["device_type"],
+                        "ip_type": dev_data["ip_type"], 
+                        "last_seen": dev_data["last_seen"],
+                        "brand": dev_data.get("brand"), 
+                        "brand_icon": dev_data.get("brand_icon")
                     })
 
             # Send batched notifications after processing all devices
@@ -261,36 +328,72 @@ async def enrich_device(device_id: str, mac: str):
         def sync_update():
             conn = get_connection()
             try:
-                row = conn.execute("SELECT display_name, device_type, icon, attributes FROM devices WHERE id = ?", [device_id]).fetchone()
-                if row:
-                    display_name, current_type, current_icon, old_attrs_json = row
-                    new_type, new_icon = current_type, current_icon
-                    new_display = display_name
-                    try:
-                        attrs = json.loads(old_attrs_json) if old_attrs_json else {}
-                    except:
-                        attrs = {}
-                    attrs["vendor"] = vendor
-                    if fingerprint:
-                        if not current_type or current_type == "unknown":
-                            new_type = fingerprint["type"]
-                        if not current_icon or current_icon == "help-circle":
-                            new_icon = fingerprint["icon"]
-                        if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
-                            new_display = fingerprint["name"]
-                        attrs["fingerprint_id"] = fingerprint["id"]
-                        attrs["web_interface"] = fingerprint["url"]
-                        if fingerprint.get("detected_title"):
-                            attrs["web_title"] = fingerprint["detected_title"]
-                    else:
-                        if not current_type or current_type == "unknown":
-                            new_type, new_icon = classify_device(None, vendor)
-                        if not display_name or re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name):
-                             new_display = vendor
-                    conn.execute(
-                        "UPDATE devices SET vendor = COALESCE(vendor, ?), device_type = ?, icon = ?, display_name = ?, attributes = ? WHERE id = ?",
-                        [vendor, new_type, new_icon, new_display, json.dumps(attrs), device_id]
-                    )
+                    row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+                    if row:
+                        dev = row_to_dict(row)
+                        display_name = dev["display_name"]
+                        current_type = dev["device_type"]
+                        current_icon = dev["icon"]
+                        attrs = dev["attributes"]
+                        current_brand = dev.get("brand")
+                        current_brand_icon = dev.get("brand_icon")
+                        is_trusted = dev["is_trusted"]
+                        
+                        # If device is trusted, stop enrichment from touching metadata
+                        if is_trusted:
+                            # Still update attributes/vendor as they are more 'discovery' oriented but keep UI fields locked
+                            attrs = dev["attributes"]
+                            attrs["vendor"] = vendor
+                            conn.execute("UPDATE devices SET vendor = COALESCE(vendor, ?), attributes = ? WHERE id = ?", [vendor, json.dumps(attrs), device_id])
+                            return
+
+                        # Never overwrite user-customized details
+                        icon_is_user_set = current_icon and current_icon != 'help-circle'
+                        type_is_user_set = current_type and current_type != 'unknown'
+                        brand_is_user_set = current_brand is not None
+                        name_is_user_set = display_name and not re.match(r"^\d+\.\d+\.\d+\.\d+$", display_name)
+
+                        new_type, new_icon = current_type, current_icon
+                        new_brand, new_brand_icon = current_brand, current_brand_icon
+                        new_display = display_name
+                        
+                        attrs = dev["attributes"]
+                        attrs["vendor"] = vendor
+                        
+                        # Enhanced classification using current info
+                        classification = classify_device(
+                            hostname=display_name, 
+                            vendor=vendor, 
+                            ports=[], 
+                            page_title=attrs.get("web_title")
+                        )
+                        
+                        if fingerprint:
+                            if not type_is_user_set:
+                                new_type = fingerprint["type"]
+                            if not icon_is_user_set:
+                                new_icon = fingerprint["icon"]
+                            if not name_is_user_set:
+                                new_display = fingerprint["name"]
+                            attrs["fingerprint_id"] = fingerprint["id"]
+                            attrs["web_interface"] = fingerprint["url"]
+                            if fingerprint.get("detected_title"):
+                                attrs["web_title"] = fingerprint["detected_title"]
+                        else:
+                            if not type_is_user_set:
+                                new_type = classification["type"]
+                            if not icon_is_user_set:
+                                new_icon = classification["icon"]
+                            if not brand_is_user_set:
+                                new_brand = classification.get("brand")
+                                new_brand_icon = classification.get("brand_icon")
+                            
+                            if not name_is_user_set:
+                                 new_display = vendor
+                        conn.execute(
+                            "UPDATE devices SET vendor = COALESCE(vendor, ?), device_type = ?, icon = ?, brand = ?, brand_icon = ?, display_name = ?, attributes = ? WHERE id = ?",
+                            [vendor, new_type, new_icon, new_brand, new_brand_icon, new_display, json.dumps(attrs), device_id]
+                        )
                     from app.core.db import commit
                     commit()
             finally:
@@ -300,14 +403,21 @@ async def enrich_device(device_id: str, mac: str):
         def sync_notify():
             conn = get_connection()
             try:
-                row = conn.execute("SELECT ip, mac, display_name, vendor, icon, device_type, ip_type, last_seen FROM devices WHERE id = ?", [device_id]).fetchone()
+                row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
                 if row:
-                    dev_info = {
-                        "ip": row[0], "mac": row[1], "hostname": row[2], 
-                        "vendor": row[3], "icon": row[4], "device_type": row[5],
-                        "ip_type": row[6], "last_seen": row[7]
-                    }
-                    publish_device_online(dev_info)
+                    dev = row_to_dict(row)
+                    publish_device_online({
+                        "ip": dev["ip"], 
+                        "mac": dev["mac"], 
+                        "hostname": dev["display_name"] or dev["name"], 
+                        "vendor": dev["vendor"], 
+                        "icon": dev["icon"], 
+                        "device_type": dev["device_type"],
+                        "ip_type": dev["ip_type"], 
+                        "last_seen": dev["last_seen"],
+                        "brand": dev.get("brand"), 
+                        "brand_icon": dev.get("brand_icon")
+                    })
             finally:
                 conn.close()
         await asyncio.to_thread(sync_notify)
@@ -316,13 +426,16 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
     def sync_update():
         conn = get_connection()
         try:
-            row = conn.execute("SELECT id, ip, mac, name, display_name, device_type, vendor, icon, status, ip_type, first_seen, last_seen, is_trusted FROM devices WHERE id = ?", [device_id]).fetchone()
+            row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
             if not row: return None
-            valid_cols = {'display_name', 'device_type', 'icon', 'attributes', 'ip_type', 'is_trusted', 'parent_id'}
+            valid_cols = {'name', 'display_name', 'device_type', 'icon', 'attributes', 'ip_type', 'is_trusted', 'parent_id', 'brand', 'brand_icon', 'vendor', 'open_ports'}
             updates = []
             params = []
             for k, v in fields.items():
-                if k in valid_cols and v is not None:
+                if k in valid_cols:
+                    # Handle JSON serialization for dict/list fields
+                    if k in ('attributes', 'open_ports') and not isinstance(v, str):
+                        v = json.dumps(v)
                     updates.append(f"{k} = ?")
                     params.append(v)
             if updates:
@@ -330,22 +443,25 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
                 conn.execute(f"UPDATE devices SET {', '.join(updates)} WHERE id = ?", params)
                 from app.core.db import commit
                 commit()
-            updated = conn.execute("SELECT id, ip, mac, name, display_name, device_type, vendor, icon, status, ip_type, first_seen, last_seen, is_trusted FROM devices WHERE id = ?", [device_id]).fetchone()
-            return updated
+            updated = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+            return row_to_dict(updated)
         finally:
             conn.close()
 
-    updated = await asyncio.to_thread(sync_update)
-    if not updated: return None
-    dev_info = {
-        "id": updated[0], "ip": updated[1], "mac": updated[2], "name": updated[3],
-        "display_name": updated[4], "device_type": updated[5], "vendor": updated[6],
-        "icon": updated[7], "status": updated[8], "ip_type": updated[9], "first_seen": updated[10], "last_seen": updated[11],
-        "is_trusted": updated[12]
-    }
+    dev_info = await asyncio.to_thread(sync_update)
+    if not dev_info: return None
+    
+    # Notify MQTT about the update
     await asyncio.to_thread(publish_device_online, {
-        "ip": dev_info["ip"], "mac": dev_info["mac"], "hostname": dev_info["display_name"],
-        "vendor": dev_info["vendor"], "icon": dev_info["icon"], "device_type": dev_info["device_type"],
-        "ip_type": dev_info["ip_type"], "last_seen": dev_info["last_seen"]
+        "ip": dev_info["ip"], 
+        "mac": dev_info["mac"], 
+        "hostname": dev_info["display_name"] or dev_info["name"],
+        "vendor": dev_info["vendor"], 
+        "icon": dev_info["icon"], 
+        "device_type": dev_info["device_type"],
+        "ip_type": dev_info["ip_type"], 
+        "last_seen": dev_info["last_seen"],
+        "brand": dev_info.get("brand"), 
+        "brand_icon": dev_info.get("brand_icon")
     })
     return dev_info
