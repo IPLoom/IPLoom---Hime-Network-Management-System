@@ -63,6 +63,9 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   const addNotification = (notif) => {
+    // Prevent duplicate if already fetched or received
+    if (notif.id && events.value.some(e => e.id === notif.id)) return
+    
     // Add to the beginning of the list
     events.value = [notif, ...events.value].slice(0, 50)
     unreadCount.value++

@@ -145,15 +145,18 @@ def log_task_event(task_type, event_type, message, target=None, details=None, du
     else:
         task_logger.info(message, extra=extra)
 
-    # --- Persistence (Unified Notifications) ---
+    # --- Persistence & Broadcasting ---
     notifiable_types = {'completed', 'failed', 'new_device', 'status_changed', 'security_alert'}
     noisy_tasks = {'adguard_sync', 'openwrt_sync', 'mqtt_sync'}
     is_noisy_completion = event_type == 'completed' and task_type in noisy_tasks
     
     if (event_type in notifiable_types and not is_noisy_completion) or level.upper() in ["ERROR", "WARNING"]:
-        # Queue for background persistence
+        notif_id = str(uuid.uuid4())
+        created_at = utc_now()
+
+        # 1. Queue for background persistence
         _worker.queue.put({
-            "id": str(uuid.uuid4()),
+            "id": notif_id,
             "type": 'device' if event_type in ['new_device', 'status_changed'] else 'task',
             "task_type": task_type,
             "event_type": event_type,
@@ -161,22 +164,21 @@ def log_task_event(task_type, event_type, message, target=None, details=None, du
             "level": level.upper(),
             "target": target,
             "details": details,
-            "created_at": utc_now()
+            "created_at": created_at
         })
 
-    # --- WebSocket Broadcasting (Phase 2) ---
-    # We only broadcast "critical" events to avoid overwhelming the client
-    # Critical event types: completed, failed, new_device, status_changed, security_alert
-    if (event_type in notifiable_types and not is_noisy_completion) or level.upper() in ["ERROR", "WARNING"]:
+        # 2. WebSocket Broadcasting
         payload = {
             "type": "notification",
             "data": {
+                "id": notif_id,
+                "type": 'device' if event_type in ['new_device', 'status_changed'] else 'task',
                 "task_type": task_type,
                 "event_type": event_type,
                 "message": message,
                 "target": target,
                 "details": details,
-                "timestamp": utc_now().isoformat(),
+                "timestamp": created_at.isoformat(),
                 "level": level
             }
         }

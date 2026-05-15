@@ -206,6 +206,11 @@
                           <span class="text-sm font-medium text-slate-900 dark:text-white truncate">
                             {{ device.display_name || 'Unnamed Device' }}
                           </span>
+                          <!-- NEW Badge -->
+                          <span v-if="isNewDevice(device.first_seen)"
+                            class="px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500 text-white shadow-sm shadow-emerald-500/20 animate-pulse-slow">
+                            New
+                          </span>
                         </div>
                       <div class="flex flex-wrap items-center gap-2">
                         <div class="text-xs text-slate-500 font-mono">{{ device.ip }}</div>
@@ -489,6 +494,15 @@ import { useNotifications } from '@/composables/useNotifications'
 import { useWebSockets } from '@/composables/useWebSockets'
 
 const { lastNotification } = useWebSockets()
+const isNewDevice = (firstSeen) => {
+  if (!firstSeen) return false
+  try {
+    const firstSeenDate = DateTime.fromISO(firstSeen)
+    return DateTime.now().diff(firstSeenDate, 'hours').hours < 24
+  } catch (e) {
+    return false
+  }
+}
 
 watch(lastNotification, (notif) => {
   if (notif && (notif.event_type === 'new_device' || notif.event_type === 'status_changed' || notif.event_type === 'completed')) {

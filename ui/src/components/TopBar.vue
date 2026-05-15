@@ -101,8 +101,15 @@
 
                     <!-- System Hub: Live & Notifications -->
                     <div class="flex items-center gap-1.5 p-1 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/50 dark:border-slate-700/30">
+                        <div v-if="deviceStore.stats.new_24h > 0" 
+                            @click="router.push('/devices')"
+                            class="hidden sm:flex items-center gap-1.5 px-3 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-pointer hover:bg-emerald-500/20 transition-all group">
+                            <Radar class="w-3.5 h-3.5 animate-pulse" />
+                            <span class="text-[10px] font-black uppercase tracking-widest">{{ deviceStore.stats.new_24h }} New Today</span>
+                        </div>
+
                         <div class="hidden sm:flex items-center gap-1.5 px-3 h-9 rounded-lg border transition-colors duration-500"
-                            :class="ws.connected.value ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'">
+                            :class="ws.connected.value ? 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400' : 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400'">
                             <Zap class="w-3.5 h-3.5" :class="{ 'animate-pulse': ws.connected.value }" />
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ ws.connected.value ? 'Live' : 'Offline' }}</span>
                         </div>
@@ -219,15 +226,17 @@ import {
     ShieldCheck as ShieldCheckIcon
 } from 'lucide-vue-next'
 import { useNotifications } from '@/composables/useNotifications'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import AppLogo from './AppLogo.vue'
 import { useSearchStore } from '@/stores/search'
 import { useNotificationStore } from '@/stores/notifications'
 import { useIntegrationStore } from '@/stores/integrations'
 import { useAuthStore } from '@/stores/authStore'
+import { useDeviceStore } from '@/stores/devices'
 import { useRouter } from 'vue-router'
 import { formatRelativeTime, parseUTC } from '@/utils/date'
 import { useWebSockets } from '@/composables/useWebSockets'
+import { Radar } from 'lucide-vue-next'
 
 defineEmits(['toggle-mobile-menu'])
 
@@ -235,6 +244,7 @@ const searchStore = useSearchStore()
 const notificationStore = useNotificationStore()
 const integrationStore = useIntegrationStore()
 const authStore = useAuthStore()
+const deviceStore = useDeviceStore()
 const router = useRouter()
 const ws = useWebSockets()
 
@@ -242,10 +252,17 @@ const showResults = ref(false)
 const showNotifications = ref(false)
 const showUserMenu = ref(false)
 
+watch(ws.lastNotification, (notif) => {
+    if (notif && notif.event_type === 'new_device') {
+        deviceStore.fetchStats()
+    }
+})
+
 onMounted(() => {
     notificationStore.fetchNotifications(true)
     notificationStore.fetchUnreadCount()
     integrationStore.fetchStatuses()
+    deviceStore.fetchStats()
 })
 
 const getIntegrationStatus = (key) => {

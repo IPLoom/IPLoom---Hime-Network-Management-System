@@ -66,15 +66,15 @@ export function useWebSockets() {
     // Update notification store so badge and list update immediately
     const notificationStore = useNotificationStore()
     notificationStore.addNotification({
-      id: Math.random().toString(36).substr(2, 9), // Temporary ID until refresh
-      type: ['new_device', 'status_changed'].includes(event_type) ? 'device' : 'task',
+      id: data.id || Math.random().toString(36).substring(2, 9),
+      type: data.type || (['new_device', 'status_changed'].includes(event_type) ? 'device' : 'task'),
       task_type,
       event_type,
       message,
-      level: level.toUpperCase(),
+      level: level?.toUpperCase() || 'INFO',
       target: data.target,
       details: data.details,
-      created_at: new Date().toISOString(),
+      created_at: data.timestamp || new Date().toISOString(),
       read_at: null
     })
 

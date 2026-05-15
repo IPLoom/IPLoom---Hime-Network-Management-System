@@ -13,13 +13,22 @@
         <nav class="flex-1 overflow-y-auto py-4 px-2">
           <ul class="space-y-1">
             <li v-for="item in navItems" :key="item.name">
-              <router-link :to="item.path" class="nav-item" :class="[
+              <router-link :to="item.path" class="nav-item group" :class="[
                 $route.path === item.path || ($route.path.startsWith(item.path) && item.path !== '/')
                   ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'
                   : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
               ]" v-tooltip:right="sidebarCollapsed ? item.name : null">
-                <component :is="item.icon" class="h-5 w-5 flex-shrink-0" :class="sidebarCollapsed ? '' : 'mr-3'" />
-                <span v-if="!sidebarCollapsed">{{ item.name }}</span>
+                <div class="relative">
+                  <component :is="item.icon" class="h-5 w-5 flex-shrink-0" :class="sidebarCollapsed ? '' : 'mr-3'" />
+                  <!-- Optional Badge on icon for collapsed state -->
+                  <span v-if="sidebarCollapsed && item.badge" 
+                    class="absolute -top-1 -right-1 h-2 w-2 bg-emerald-500 rounded-full border border-white dark:border-slate-800 animate-pulse"></span>
+                </div>
+                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.name }}</span>
+                <span v-if="!sidebarCollapsed && item.badge" 
+                  class="ml-auto px-1.5 py-0.5 text-[9px] font-black bg-emerald-500 text-white rounded-full animate-pulse-slow">
+                  {{ item.badge }}
+                </span>
               </router-link>
             </li>
           </ul>
@@ -84,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import AppLogo from './AppLogo.vue'
 import TopBar from './TopBar.vue'
 import NotificationToast from './NotificationToast.vue'
@@ -121,14 +130,17 @@ const sidebarCollapsed = ref(true)
 const mobileMenuOpen = ref(false)
 const version = import.meta.env.VITE_APP_VERSION || 'v0.3.1'
 
-const navItems = [
+import { useDeviceStore } from '@/stores/devices'
+const deviceStore = useDeviceStore()
+
+const navItems = computed(() => [
   { name: 'Dashboard', path: '/', icon: HomeIcon },
-  { name: 'Devices', path: '/devices', icon: ComputerDesktopIcon },
+  { name: 'Devices', path: '/devices', icon: ComputerDesktopIcon, badge: deviceStore.stats.new_24h > 0 ? deviceStore.stats.new_24h : null },
   { name: 'Topology', path: '/topology', icon: ShareIcon },
   { name: 'Events', path: '/events', icon: BellIcon },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon },
   { name: 'IP Occupancy', path: '/occupancy', icon: TableCellsIcon },
   { name: 'Logs & Activity', path: '/logs', icon: CommandLineIcon },
   { name: 'Settings', path: '/settings', icon: Cog6ToothIcon },
-]
+])
 </script>
