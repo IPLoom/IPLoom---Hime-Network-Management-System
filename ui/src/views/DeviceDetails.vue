@@ -130,6 +130,17 @@
             <span>Verified</span>
           </div>
 
+          <!-- Block / Unblock Toggle -->
+          <button @click="toggleBlock"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm transition-all"
+            :class="device.is_blocked 
+              ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 hover:bg-red-500/20' 
+              : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500'"
+            v-tooltip="device.is_blocked ? 'Unblock Device Access' : 'Block Device Access'">
+            <Ban class="w-3.5 h-3.5" :class="{ 'text-red-500': device.is_blocked }" />
+            <span>{{ device.is_blocked ? 'Blocked' : 'Block' }}</span>
+          </button>
+
           <!-- Brand Popover Integration -->
           <Popover class="relative">
             <PopoverButton
@@ -802,7 +813,7 @@ import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import {
   ArrowLeft, Loader2, ScanSearch, Save, Search, ChevronDown, Activity, Terminal, ExternalLink, ShieldAlert, ShieldCheck,
-  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check
+  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check, Ban
 } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
@@ -916,6 +927,30 @@ const formatTime = (ts) => {
 const getIPAllocationLabel = (val) => {
   if (val === 'static') return 'Static IP'
   return 'Dynamic (DHCP)'
+}
+
+const toggleBlock = async () => {
+  if (!device.value) return
+  if (!device.value.mac || device.value.mac === 'unknown' || device.value.mac === 'N/A') {
+    notify('Error', 'Cannot block device without a valid MAC address', 'error')
+    return
+  }
+  const isCurrentlyBlocked = device.value.is_blocked
+  const action = isCurrentlyBlocked ? 'unblock' : 'block'
+  
+  try {
+    const res = await api.post(`/integrations/openwrt/devices/${device.value.mac}/${action}`)
+    if (res.data.status === 'success') {
+      device.value.is_blocked = !isCurrentlyBlocked
+      notify(
+        'Success', 
+        `Device ${isCurrentlyBlocked ? 'unblocked' : 'blocked'} successfully`, 
+        'success'
+      )
+    }
+  } catch (err) {
+    notify('Error', err.response?.data?.detail || `Failed to ${action} device`, 'error')
+  }
 }
 
 const approveDevice = async () => {

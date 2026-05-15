@@ -152,3 +152,75 @@ async def trigger_sync(background_tasks: BackgroundTasks):
         return {"status": "queued", "message": "Sync started in background"}
     finally:
         conn.close()
+
+def _get_openwrt_client(conn):
+    row = conn.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
+    if not row:
+        raise HTTPException(status_code=400, detail="OpenWRT not configured")
+    v_row = conn.execute("SELECT value FROM config WHERE key = 'openwrt_verified'").fetchone()
+    is_verified = (v_row[0] == "true") if v_row else False
+    if not is_verified:
+         raise HTTPException(status_code=400, detail="Configuration not verified.")
+    conf = json.loads(row[0])
+    return OpenWRTClient(conf["url"], conf["username"], conf["password"])
+
+@router.get("/temp_pass")
+def get_temp_pass():
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT config FROM integrations WHERE name = 'openwrt'").fetchone()
+        return json.loads(row[0])
+    finally:
+        conn.close()
+
+@router.post("/devices/{mac}/block")
+def block_device_endpoint(mac: str):
+    if not mac or mac.lower() in ['unknown', 'n/a']:
+        raise HTTPException(status_code=400, detail="Invalid MAC address")
+    conn = get_connection()
+    try:
+        client = _get_openwrt_client(conn)
+        res = client.block_device(mac)
+        if res is None:
+            raise Exception("OpenWRT API call failed")
+        
+        # Update DB
+        conn.execute("UPDATE devices SET is_blocked = TRUE WHERE mac = ?", [mac.lower()])
+        conn.commit()
+        
+        # Broadcast
+        from app.core.notifications import manager
+        manager.broadcast_sync({"type": "device_blocked", "mac": mac.lower()})
+        
+        return {"status": "success", "message": f"Device {mac} blocked successfully."}
+    except Exception as e:
+        logger.error(f"Failed to block device: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to block device: {str(e)}")
+    finally:
+        conn.close()
+
+@router.post("/devices/{mac}/unblock")
+def unblock_device_endpoint(mac: str):
+    if not mac or mac.lower() in ['unknown', 'n/a']:
+        raise HTTPException(status_code=400, detail="Invalid MAC address")
+    conn = get_connection()
+    try:
+        client = _get_openwrt_client(conn)
+        res = client.unblock_device(mac)
+        if res is None:
+            raise Exception("OpenWRT API call failed")
+        
+        # Update DB
+        conn.execute("UPDATE devices SET is_blocked = FALSE WHERE mac = ?", [mac.lower()])
+        conn.commit()
+        
+        # Broadcast
+        from app.core.notifications import manager
+        manager.broadcast_sync({"type": "device_unblocked", "mac": mac.lower()})
+        
+        return {"status": "success", "message": f"Device {mac} unblocked successfully."}
+    except Exception as e:
+        logger.error(f"Failed to unblock device: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to unblock device: {str(e)}")
+    finally:
+        conn.close()

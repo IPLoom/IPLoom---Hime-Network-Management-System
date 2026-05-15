@@ -251,15 +251,18 @@ class OpenWRTClient:
                     if not lease and t_total["down"] == 0 and t_total["up"] == 0:
                         continue
 
-                    # Resolve Device ID & details from DB
-                    row = conn.execute("SELECT id, name, display_name, icon, attributes, ip, ip_type FROM devices WHERE mac = ?", [mac]).fetchone()
+                    row = conn.execute("SELECT id, name, display_name, icon, attributes, ip, ip_type, mac FROM devices WHERE mac = ?", [mac]).fetchone()
                     if not row:
-                        row = conn.execute("SELECT id, name, display_name, icon, attributes, ip, ip_type FROM devices WHERE id = ?", [mac]).fetchone()
+                        row = conn.execute("SELECT id, name, display_name, icon, attributes, ip, ip_type, mac FROM devices WHERE id = ?", [mac]).fetchone()
+                    
+                    # Fallback: if scanner found it but couldn't get MAC, try mapping by IP
+                    if not row and lease and lease.get("ip"):
+                        row = conn.execute("SELECT id, name, display_name, icon, attributes, ip, ip_type, mac FROM devices WHERE ip = ?", [lease["ip"]]).fetchone()
+
                     
                     if row:
                         target_id = row[0]
                         existing_name = row[1]
-                        # display_name = row[2]
                         existing_icon = row[3]
                         try:
                             attrs = json.loads(row[4]) if row[4] else {}
@@ -267,6 +270,7 @@ class OpenWRTClient:
                             attrs = {}
                         existing_ip = row[5]
                         existing_ip_type = row[6]
+                        existing_mac = row[7]
                     else:
                         # If device not in DB, and has no lease, we skip (scanner hasn't found it yet)
                         # We only create/update if we have a known ID or if we get a lease giving us an IP
@@ -319,14 +323,15 @@ class OpenWRTClient:
 
                     # Update Device Table
                     if row:
-                        # Update existing - ONLY ip_type and attributes
+                        # Update existing - update mac if missing, ip_type, and attributes
                         try:
                              conn.execute("""
                                 UPDATE devices SET
+                                    mac = COALESCE(mac, ?),
                                     ip_type = ?,
                                     attributes = ?
                                 WHERE id = ?
-                            """, [ip_type, json.dumps(attrs), target_id])
+                            """, [mac, ip_type, json.dumps(attrs), target_id])
                              updated_count += 1
                         except Exception as e:
                             logger.error(f"Failed to update device {mac}: {e}")
@@ -387,3 +392,59 @@ class OpenWRTClient:
             )
             
             raise e
+
+    def block_device(self, mac: str):
+        """Block a device by MAC address using OpenWrt firewall (uci)."""
+        logger.info(f"OpenWRT: Blocking device {mac}")
+        sanitized_mac = mac.replace(':', '').lower()
+        rule_name = f"block_{sanitized_mac}"
+        
+        # Create the section if it doesn't exist
+        self._call("uci", "add", {
+            "config": "firewall",
+            "type": "rule",
+            "name": rule_name
+        }, optional=True)
+        
+        # Update the named firewall rule section
+        res = self._call("uci", "set", {
+            "config": "firewall",
+            "type": "rule",
+            "section": rule_name,
+            "values": {
+                "name": f"IPLoom_Block_{sanitized_mac}",
+                "src": "lan",
+                "dest": "wan",
+                "src_mac": mac,
+                "target": "REJECT"
+            }
+        }, optional=False)
+        
+        # Commit the changes
+        self._call("uci", "commit", {"config": "firewall"}, optional=False)
+        
+        # Apply changes (OpenWrt >= 21.02 natively uses uci apply)
+        self._call("uci", "apply", {"timeout": 10, "rollback": False}, optional=True)
+        
+        return res
+
+    def unblock_device(self, mac: str):
+        """Unblock a device by MAC address using OpenWrt firewall (uci)."""
+        logger.info(f"OpenWRT: Unblocking device {mac}")
+        sanitized_mac = mac.replace(':', '').lower()
+        rule_name = f"block_{sanitized_mac}"
+        
+        # Delete the section
+        res = self._call("uci", "delete", {
+            "config": "firewall",
+            "section": rule_name
+        }, optional=True)
+        
+        # Commit the changes
+        self._call("uci", "commit", {"config": "firewall"}, optional=True)
+        
+        # Apply changes
+        self._call("uci", "apply", {"timeout": 10, "rollback": False}, optional=True)
+        
+        return res
+

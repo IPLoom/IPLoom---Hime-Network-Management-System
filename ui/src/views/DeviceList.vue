@@ -230,6 +230,12 @@
                           v-tooltip="`${device.dns_stats.blocked} blocked queries`">
                           <ShieldAlert class="h-3 w-3" /> DNS
                         </span>
+                        <!-- Firewall Blocked Indicator -->
+                        <span v-if="device.is_blocked"
+                          class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center gap-1"
+                          v-tooltip="'Internet Access Blocked via OpenWrt'">
+                          <Ban class="h-3 w-3" /> Blocked
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -277,6 +283,13 @@
                       v-tooltip="approvingId === device.id ? 'Trusting...' : 'Trust this Device'">
                       <Loader2 v-if="approvingId === device.id" class="h-4 w-4 animate-spin" />
                       <ShieldCheck v-else class="h-4 w-4" />
+                    </button>
+                    <button @click.stop="toggleBlockList(device)"
+                      class="p-1.5 rounded-lg transition-all"
+                      :class="device.is_blocked ? 'text-red-600 bg-red-50 dark:bg-red-900/20 hover:text-red-700' : 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'"
+                      v-tooltip="device.is_blocked ? 'Unblock Device Access' : 'Block Device Access'">
+                      <Loader2 v-if="blockingId === device.id" class="h-4 w-4 animate-spin text-slate-400" />
+                      <Ban v-else class="h-4 w-4" />
                     </button>
                     <router-link :to="{ name: 'DeviceDetails', params: { id: device.id } }" class="btn-action !p-1.5"
                       v-tooltip="'View Device Details'">
@@ -463,7 +476,7 @@ import EditDeviceModal from '@/components/EditDeviceModal.vue'
 import DiscoveryModal from '@/components/DiscoveryModal.vue'
 import { getIcon } from '@/utils/icons'
 import * as LucideIcons from 'lucide-vue-next'
-const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar } = LucideIcons
+const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar, Ban } = LucideIcons
 import { DateTime } from 'luxon'
 import { formatRelativeTime, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
@@ -658,6 +671,27 @@ const triggerScan = async () => {
 
 const approveDevice = (device) => {
   deviceToApprove.value = device
+}
+
+const blockingId = ref(null)
+const toggleBlockList = async (device) => {
+  if (!device.mac || device.mac === 'unknown' || device.mac === 'N/A') {
+    notifyError('Cannot block device without a valid MAC address')
+    return
+  }
+  blockingId.value = device.id
+  const action = device.is_blocked ? 'unblock' : 'block'
+  try {
+    const res = await api.post(`/integrations/openwrt/devices/${device.mac}/${action}`)
+    if (res.data.status === 'success') {
+      device.is_blocked = !device.is_blocked
+      notifySuccess(`Device ${device.is_blocked ? 'blocked' : 'unblocked'} successfully`)
+    }
+  } catch (err) {
+    notifyError(err.response?.data?.detail || `Failed to ${action} device`)
+  } finally {
+    blockingId.value = null
+  }
 }
 
 const confirmApprove = async () => {
