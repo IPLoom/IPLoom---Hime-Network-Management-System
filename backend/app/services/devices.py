@@ -15,7 +15,16 @@ from app.core.task_logger import log_task_event
 logger = logging.getLogger(__name__)
 
 # Standard columns for device SELECTs
-DEVICE_COLUMNS = "id, ip, mac, name, display_name, device_type, first_seen, last_seen, vendor, icon, status, ip_type, open_ports, attributes, is_trusted, brand, brand_icon, parent_id, is_blocked, has_schedule, is_manual_block"
+DEVICE_COLUMNS = """
+    d.id, d.ip, d.mac, d.name, d.display_name, d.device_type, d.first_seen, d.last_seen, 
+    d.vendor, d.icon, d.status, d.ip_type, d.open_ports, d.attributes, d.is_trusted, 
+    d.brand, d.brand_icon, d.parent_id, d.is_blocked, d.has_schedule, d.is_manual_block, 
+    d.is_scheduled_block, d.is_quota_exceeded, d.is_manual_unblock,
+    q.limit_bytes, q.current_usage, q.enabled as quota_enabled
+"""
+
+def get_base_query():
+    return f"SELECT {DEVICE_COLUMNS} FROM devices d LEFT JOIN device_quotas q ON d.id = q.device_id"
 
 def row_to_dict(row):
     if not row: return None
@@ -42,6 +51,18 @@ def row_to_dict(row):
     if len(row) > 18: d["is_blocked"] = bool(row[18])
     if len(row) > 19: d["has_schedule"] = bool(row[19])
     if len(row) > 20: d["is_manual_block"] = bool(row[20])
+    if len(row) > 21: d["is_scheduled_block"] = bool(row[21])
+    if len(row) > 22: d["is_quota_exceeded"] = bool(row[22])
+    if len(row) > 23: d["is_manual_unblock"] = bool(row[23])
+    
+    # Quota joined columns
+    if len(row) > 24:
+        d["quota"] = {
+            "limit_bytes": row[24],
+            "current_usage": row[25],
+            "enabled": bool(row[26])
+        } if row[24] is not None else None
+        
     return d
 
 async def upsert_device_from_scan(
@@ -89,13 +110,13 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                 # Optimized: Fetch all necessary fields in one go
                 if mac and mac.lower() != "unknown":
                     existing_device = conn.execute(
-                        f"SELECT {DEVICE_COLUMNS} FROM devices WHERE mac = ?", 
+                        f"{get_base_query()} WHERE d.mac = ?", 
                         [mac]
                     ).fetchone()
                 
                 if not existing_device:
                     existing_device = conn.execute(
-                        f"SELECT {DEVICE_COLUMNS} FROM devices WHERE ip = ?", 
+                        f"{get_base_query()} WHERE d.ip = ?", 
                         [ip]
                     ).fetchone()
 
@@ -210,7 +231,7 @@ async def batch_upsert_devices(devices_data: List[Dict[str, Any]]) -> List[str]:
                     last_recovered_device = {"ip": ip, "name": hostname or ip, "id": device_id}
 
                 # Always notify on discovery to ensure MQTT state (HA) stays fresh
-                dev_row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+                dev_row = conn.execute(f"{get_base_query()} WHERE d.id = ?", [device_id]).fetchone()
                 if dev_row:
                     dev_data = row_to_dict(dev_row)
                     online_notifications.append({
@@ -330,7 +351,7 @@ async def enrich_device(device_id: str, mac: str):
         def sync_update():
             conn = get_connection()
             try:
-                    row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+                    row = conn.execute(f"{get_base_query()} WHERE d.id = ?", [device_id]).fetchone()
                     if row:
                         dev = row_to_dict(row)
                         display_name = dev["display_name"]
@@ -405,7 +426,7 @@ async def enrich_device(device_id: str, mac: str):
         def sync_notify():
             conn = get_connection()
             try:
-                row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+                row = conn.execute(f"{get_base_query()} WHERE d.id = ?", [device_id]).fetchone()
                 if row:
                     dev = row_to_dict(row)
                     publish_device_online({
@@ -428,13 +449,20 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
     def sync_update():
         conn = get_connection()
         try:
-            row = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+            row = conn.execute(f"{get_base_query()} WHERE d.id = ?", [device_id]).fetchone()
             if not row: return None
-            valid_cols = {'name', 'display_name', 'device_type', 'icon', 'attributes', 'ip_type', 'is_trusted', 'parent_id', 'brand', 'brand_icon', 'vendor', 'open_ports'}
+            valid_cols = {
+                'name', 'display_name', 'device_type', 'icon', 'attributes', 
+                'ip_type', 'is_trusted', 'parent_id', 'brand', 'brand_icon', 
+                'vendor', 'open_ports', 'is_manual_block', 'is_manual_unblock'
+            }
             updates = []
             params = []
+            trigger_policy = False
             for k, v in fields.items():
                 if k in valid_cols:
+                    if k in ('is_manual_block', 'is_manual_unblock'):
+                        trigger_policy = True
                     # Handle JSON serialization for dict/list fields
                     if k in ('attributes', 'open_ports') and not isinstance(v, str):
                         v = json.dumps(v)
@@ -445,13 +473,18 @@ async def update_device_fields(device_id: str, fields: Dict[str, Any]) -> Option
                 conn.execute(f"UPDATE devices SET {', '.join(updates)} WHERE id = ?", params)
                 from app.core.db import commit
                 commit()
-            updated = conn.execute(f"SELECT {DEVICE_COLUMNS} FROM devices WHERE id = ?", [device_id]).fetchone()
+            updated = conn.execute(f"{get_base_query()} WHERE d.id = ?", [device_id]).fetchone()
             return row_to_dict(updated)
         finally:
             conn.close()
 
     dev_info = await asyncio.to_thread(sync_update)
     if not dev_info: return None
+    
+    # Trigger policy re-evaluation if manual override flags were changed
+    if any(k in fields for k in ('is_manual_block', 'is_manual_unblock')):
+        from app.services.policy import apply_device_policy
+        await apply_device_policy(device_id)
     
     # Notify MQTT about the update
     await asyncio.to_thread(publish_device_online, {

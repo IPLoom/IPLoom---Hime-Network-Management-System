@@ -24,6 +24,11 @@ class DeviceRead(BaseModel):
     parent_id: Optional[str] = None
     is_blocked: bool = False
     has_schedule: bool = False
+    is_manual_block: bool = False
+    is_scheduled_block: bool = False
+    is_quota_exceeded: bool = False
+    is_manual_unblock: bool = False
+    quota: Optional[dict] = None # {limit_bytes: int, current_usage: int, enabled: bool}
 
 class DeviceUpdate(BaseModel):
     name: Optional[str] = None

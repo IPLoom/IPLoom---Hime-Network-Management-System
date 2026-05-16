@@ -155,6 +155,33 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
         print("Migration: Adding 'is_manual_block' column to 'devices'")
         conn.execute("ALTER TABLE devices ADD COLUMN is_manual_block BOOLEAN DEFAULT FALSE")
 
+    if 'is_scheduled_block' not in col_names:
+        print("Migration: Adding 'is_scheduled_block' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN is_scheduled_block BOOLEAN DEFAULT FALSE")
+
+    if 'is_quota_exceeded' not in col_names:
+        print("Migration: Adding 'is_quota_exceeded' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN is_quota_exceeded BOOLEAN DEFAULT FALSE")
+
+    if 'is_manual_unblock' not in col_names:
+        print("Migration: Adding 'is_manual_unblock' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN is_manual_unblock BOOLEAN DEFAULT FALSE")
+
+    # Ensure device_quotas table exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS device_quotas (
+            id               TEXT PRIMARY KEY,
+            device_id        TEXT NOT NULL,
+            limit_bytes      BIGINT NOT NULL,
+            period_hours     INTEGER NOT NULL DEFAULT 24,
+            current_usage    BIGINT DEFAULT 0,
+            last_reset_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_exceeded      BOOLEAN DEFAULT FALSE,
+            enabled          BOOLEAN DEFAULT TRUE,
+            UNIQUE(device_id)
+        )
+    """)
+
     # Ensure device_status_history table exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS device_status_history (

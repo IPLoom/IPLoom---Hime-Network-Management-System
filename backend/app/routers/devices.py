@@ -66,8 +66,11 @@ async def _internal_list_devices(
             base_sql = """
                 SELECT d.id, d.ip, d.mac, d.name, d.display_name, d.device_type,
                        d.first_seen, d.last_seen, d.vendor, d.icon, d.open_ports, d.status, d.ip_type, d.attributes, d.is_trusted, d.brand, d.brand_icon, d.is_blocked,
-                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = d.id AND s.enabled = TRUE) as schedule_count
+                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = d.id AND s.enabled = TRUE) as schedule_count,
+                       d.is_manual_block, d.is_scheduled_block, d.is_quota_exceeded, d.is_manual_unblock,
+                       q.limit_bytes, q.current_usage, q.enabled as quota_enabled
                 FROM devices d
+                LEFT JOIN device_quotas q ON d.id = q.device_id
             """
             if clauses:
                 base_sql += " WHERE " + " AND ".join(clauses)
@@ -133,6 +136,15 @@ async def _internal_list_devices(
                     brand_icon=r[16] if len(r) > 16 else None,
                     is_blocked=r[17] if len(r) > 17 and r[17] is not None else False,
                     has_schedule=(r[18] > 0) if len(r) > 18 and r[18] is not None else False,
+                    is_manual_block=r[19] if len(r) > 19 else False,
+                    is_scheduled_block=r[20] if len(r) > 20 else False,
+                    is_quota_exceeded=r[21] if len(r) > 21 else False,
+                    is_manual_unblock=r[22] if len(r) > 22 else False,
+                    quota={
+                        "limit_bytes": r[23],
+                        "current_usage": r[24],
+                        "enabled": bool(r[25])
+                    } if len(r) > 23 and r[23] is not None else None,
                     traffic_history=traffic_map.get(r[0], [])
                 )
                 for r in rows
@@ -182,10 +194,14 @@ async def get_device(device_id: str):
         try:
             row = conn.execute(
                 """
-                SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked,
-                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = devices.id AND s.enabled = TRUE) as schedule_count
-                FROM devices WHERE id = ?
+                SELECT d.id, d.ip, d.mac, d.name, d.display_name, d.device_type,
+                       d.first_seen, d.last_seen, d.vendor, d.icon, d.open_ports, d.status, d.ip_type, d.attributes, d.is_trusted, d.brand, d.brand_icon, d.is_blocked,
+                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = d.id AND s.enabled = TRUE) as schedule_count,
+                       d.is_manual_block, d.is_scheduled_block, d.is_quota_exceeded, d.is_manual_unblock,
+                       q.limit_bytes, q.current_usage, q.enabled as quota_enabled
+                FROM devices d
+                LEFT JOIN device_quotas q ON d.id = q.device_id
+                WHERE d.id = ?
                 """,
                 [device_id],
             ).fetchone()
@@ -216,6 +232,15 @@ async def get_device(device_id: str):
                 brand_icon=row[16] if len(row) > 16 else None,
                 is_blocked=row[17] if len(row) > 17 and row[17] is not None else False,
                 has_schedule=(row[18] > 0) if len(row) > 18 and row[18] is not None else False,
+                is_manual_block=row[19] if len(row) > 19 else False,
+                is_scheduled_block=row[20] if len(row) > 20 else False,
+                is_quota_exceeded=row[21] if len(row) > 21 else False,
+                is_manual_unblock=row[22] if len(row) > 22 else False,
+                quota={
+                    "limit_bytes": row[23],
+                    "current_usage": row[24],
+                    "enabled": bool(row[25])
+                } if len(row) > 23 and row[23] is not None else None,
                 traffic_history=traffic
             )
         finally:

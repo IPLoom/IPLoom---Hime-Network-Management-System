@@ -165,23 +165,23 @@ def _get_openwrt_client(conn):
     return OpenWRTClient(conf["url"], conf["username"], conf["password"])
 
 @router.post("/devices/{mac}/block")
-def block_device_endpoint(mac: str):
+async def block_device_endpoint(mac: str):
     if not mac or mac.lower() in ['unknown', 'n/a']:
         raise HTTPException(status_code=400, detail="Invalid MAC address")
     conn = get_connection()
     try:
-        client = _get_openwrt_client(conn)
-        res = client.block_device(mac)
-        if res is None:
-            raise Exception("OpenWRT API call failed")
+        # Fetch device ID
+        row = conn.execute("SELECT id FROM devices WHERE mac = ?", [mac.lower()]).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Device not found")
+        device_id = row[0]
         
-        # Update DB
-        conn.execute("UPDATE devices SET is_blocked = TRUE, is_manual_block = TRUE WHERE mac = ?", [mac.lower()])
-        conn.commit()
-        
-        # Broadcast
-        from app.core.notifications import manager
-        manager.broadcast_sync({"type": "device_blocked", "mac": mac.lower()})
+        # Centralized policy update
+        from app.services.policy import update_policy_flags
+        await update_policy_flags(device_id, {
+            "is_manual_block": True,
+            "is_manual_unblock": False
+        })
         
         return {"status": "success", "message": f"Device {mac} blocked successfully."}
     except Exception as e:
@@ -191,23 +191,23 @@ def block_device_endpoint(mac: str):
         conn.close()
 
 @router.post("/devices/{mac}/unblock")
-def unblock_device_endpoint(mac: str):
+async def unblock_device_endpoint(mac: str):
     if not mac or mac.lower() in ['unknown', 'n/a']:
         raise HTTPException(status_code=400, detail="Invalid MAC address")
     conn = get_connection()
     try:
-        client = _get_openwrt_client(conn)
-        res = client.unblock_device(mac)
-        if res is None:
-            raise Exception("OpenWRT API call failed")
+        # Fetch device ID
+        row = conn.execute("SELECT id FROM devices WHERE mac = ?", [mac.lower()]).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Device not found")
+        device_id = row[0]
         
-        # Update DB
-        conn.execute("UPDATE devices SET is_blocked = FALSE, is_manual_block = FALSE WHERE mac = ?", [mac.lower()])
-        conn.commit()
-        
-        # Broadcast
-        from app.core.notifications import manager
-        manager.broadcast_sync({"type": "device_unblocked", "mac": mac.lower()})
+        # Centralized policy update
+        from app.services.policy import update_policy_flags
+        await update_policy_flags(device_id, {
+            "is_manual_block": False,
+            "is_manual_unblock": True
+        })
         
         return {"status": "success", "message": f"Device {mac} unblocked successfully."}
     except Exception as e:
