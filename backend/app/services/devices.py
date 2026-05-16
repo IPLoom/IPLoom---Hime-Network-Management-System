@@ -15,7 +15,7 @@ from app.core.task_logger import log_task_event
 logger = logging.getLogger(__name__)
 
 # Standard columns for device SELECTs
-DEVICE_COLUMNS = "id, ip, mac, name, display_name, device_type, first_seen, last_seen, vendor, icon, status, ip_type, open_ports, attributes, is_trusted, brand, brand_icon, parent_id, is_blocked"
+DEVICE_COLUMNS = "id, ip, mac, name, display_name, device_type, first_seen, last_seen, vendor, icon, status, ip_type, open_ports, attributes, is_trusted, brand, brand_icon, parent_id, is_blocked, has_schedule, is_manual_block"
 
 def row_to_dict(row):
     if not row: return None
@@ -40,6 +40,8 @@ def row_to_dict(row):
     if len(row) > 16: d["brand_icon"] = row[16]
     if len(row) > 17: d["parent_id"] = row[17]
     if len(row) > 18: d["is_blocked"] = bool(row[18])
+    if len(row) > 19: d["has_schedule"] = bool(row[19])
+    if len(row) > 20: d["is_manual_block"] = bool(row[20])
     return d
 
 async def upsert_device_from_scan(

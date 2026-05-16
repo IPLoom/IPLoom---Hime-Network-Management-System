@@ -176,7 +176,7 @@ def block_device_endpoint(mac: str):
             raise Exception("OpenWRT API call failed")
         
         # Update DB
-        conn.execute("UPDATE devices SET is_blocked = TRUE WHERE mac = ?", [mac.lower()])
+        conn.execute("UPDATE devices SET is_blocked = TRUE, is_manual_block = TRUE WHERE mac = ?", [mac.lower()])
         conn.commit()
         
         # Broadcast
@@ -202,7 +202,7 @@ def unblock_device_endpoint(mac: str):
             raise Exception("OpenWRT API call failed")
         
         # Update DB
-        conn.execute("UPDATE devices SET is_blocked = FALSE WHERE mac = ?", [mac.lower()])
+        conn.execute("UPDATE devices SET is_blocked = FALSE, is_manual_block = FALSE WHERE mac = ?", [mac.lower()])
         conn.commit()
         
         # Broadcast

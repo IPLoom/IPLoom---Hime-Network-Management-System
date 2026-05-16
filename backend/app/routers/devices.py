@@ -64,9 +64,10 @@ async def _internal_list_devices(
 
             # Now fetch the data
             base_sql = """
-                SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked
-                FROM devices
+                SELECT d.id, d.ip, d.mac, d.name, d.display_name, d.device_type,
+                       d.first_seen, d.last_seen, d.vendor, d.icon, d.open_ports, d.status, d.ip_type, d.attributes, d.is_trusted, d.brand, d.brand_icon, d.is_blocked,
+                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = d.id AND s.enabled = TRUE) as schedule_count
+                FROM devices d
             """
             if clauses:
                 base_sql += " WHERE " + " AND ".join(clauses)
@@ -131,6 +132,7 @@ async def _internal_list_devices(
                     brand=r[15] if len(r) > 15 else None,
                     brand_icon=r[16] if len(r) > 16 else None,
                     is_blocked=r[17] if len(r) > 17 and r[17] is not None else False,
+                    has_schedule=(r[18] > 0) if len(r) > 18 and r[18] is not None else False,
                     traffic_history=traffic_map.get(r[0], [])
                 )
                 for r in rows
@@ -181,7 +183,8 @@ async def get_device(device_id: str):
             row = conn.execute(
                 """
                 SELECT id, ip, mac, name, display_name, device_type,
-                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked
+                       first_seen, last_seen, vendor, icon, open_ports, status, ip_type, attributes, is_trusted, brand, brand_icon, is_blocked,
+                       (SELECT COUNT(*) FROM device_block_schedules s WHERE s.device_id = devices.id AND s.enabled = TRUE) as schedule_count
                 FROM devices WHERE id = ?
                 """,
                 [device_id],
@@ -212,6 +215,7 @@ async def get_device(device_id: str):
                 brand=row[15] if len(row) > 15 else None,
                 brand_icon=row[16] if len(row) > 16 else None,
                 is_blocked=row[17] if len(row) > 17 and row[17] is not None else False,
+                has_schedule=(row[18] > 0) if len(row) > 18 and row[18] is not None else False,
                 traffic_history=traffic
             )
         finally:

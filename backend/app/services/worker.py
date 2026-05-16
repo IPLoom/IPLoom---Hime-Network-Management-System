@@ -17,12 +17,16 @@ active_tasks = set()
 
 async def scheduler_loop():
     from app.services.mqtt import MQTTManager
+    from app.services.internet_schedules import check_and_apply_schedules
     while True:
         try:
-            # 1. Handle background schedules
+            # 1. Handle background scan schedules & Integrations
             await handle_schedules()
             
-            # 2. Check MQTT Health
+            # 2. Handle Internet Access Schedules
+            await check_and_apply_schedules()
+            
+            # 3. Check MQTT Health
             MQTTManager.get_instance().check_health()
             
         except Exception as e:

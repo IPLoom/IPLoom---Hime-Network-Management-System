@@ -7,7 +7,7 @@ from app.core.db import init_db, commit, close_shared_connection
 from app.routers.config import router as config_router, public_router as config_public_router
 from app.routers.scans import router as scans_router
 from app.routers.devices import router as devices_router
-from app.routers.schedules import router as schedules_router
+from app.routers.internet_schedules import router as internet_schedules_router
 from app.services.worker import scheduler_loop, scan_runner_loop
 from app.routers.ssh import router as ssh_router
 from app.routers.events import router as events_router
@@ -155,7 +155,7 @@ app.include_router(config_router, prefix="/api/v1/config", tags=["config"], depe
 app.include_router(scans_router, prefix="/api/v1/scans", tags=["scans"], dependencies=[Depends(get_current_user)])
 app.include_router(devices_router, prefix="/api/v1/devices", tags=["devices"], dependencies=[Depends(get_current_user)])
 app.include_router(discovery_router, prefix="/api/v1/discovery", tags=["discovery"], dependencies=[Depends(get_current_user)])
-app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=[Depends(get_current_user)])
+app.include_router(internet_schedules_router, prefix="/api/v1/internet-schedules", tags=["internet-schedules"], dependencies=[Depends(get_current_user)])
 app.include_router(ssh_router, prefix="/api/v1/ssh", tags=["ssh"], dependencies=[Depends(get_current_user)])
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=[Depends(get_current_user)])
 app.include_router(mqtt_router, prefix="/api/v1/mqtt", tags=["mqtt"], dependencies=[Depends(get_current_user)])
