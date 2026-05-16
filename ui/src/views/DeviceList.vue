@@ -250,9 +250,34 @@
                         <!-- Scheduled Indicator -->
                         <span v-if="device.has_schedule"
                           class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 flex items-center gap-1"
-                          v-tooltip="'Recurring Internet Schedule Active'">
-                          <Clock class="h-3 w-3" /> Scheduled
+                          :class="{ 'animate-pulse ring-1 ring-rose-500/50': device.is_scheduled_block }"
+                          v-tooltip="device.is_scheduled_block ? 'Currently blocked by schedule' : 'Has recurring schedules defined'">
+                          <Clock class="h-3 w-3" :class="{ 'text-rose-600 dark:text-rose-400': device.is_scheduled_block }" /> 
+                          {{ device.is_scheduled_block ? 'Scheduled (Active)' : 'Scheduled' }}
                         </span>
+                        
+                        <!-- Quota Indicator -->
+                        <div v-if="device.is_quota_exceeded"
+                          class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 flex items-center gap-1"
+                          v-tooltip="'Internet Data Quota Exceeded'">
+                          <Zap class="h-3 w-3" /> Quota
+                        </div>
+                      </div>
+                      
+                      <!-- Quota Progress Mini Bar -->
+                      <div class="min-h-[14px]">
+                        <div v-if="device.quota" class="mt-1.5 flex items-center gap-2" v-tooltip="`${formatBytes(device.quota.current_usage)} / ${formatBytes(device.quota.limit_bytes)} used`">
+                          <div class="w-16 h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              class="h-full transition-all duration-500" 
+                              :class="device.is_quota_exceeded ? 'bg-red-500' : 'bg-blue-500'"
+                              :style="{ width: Math.min((device.quota.current_usage / device.quota.limit_bytes) * 100, 100) + '%' }"
+                            ></div>
+                          </div>
+                          <span class="text-[8px] font-black uppercase tracking-tighter" :class="device.is_quota_exceeded ? 'text-red-500' : 'text-slate-500'">
+                            {{ Math.round((device.quota.current_usage / device.quota.limit_bytes) * 100) }}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -308,8 +333,7 @@
                       <Loader2 v-if="blockingId === device.id" class="h-4 w-4 animate-spin text-slate-400" />
                       <Ban v-else class="h-4 w-4" />
                     </button>
-                    <router-link :to="{ name: 'DeviceDetails', params: { id: device.id } }" class="btn-action !p-1.5"
-                      v-tooltip="'View Device Details'">
+                    <router-link :to="{ name: 'DeviceDetails', params: { id: device.id } }" class="btn-action !p-1.5">
                       <Eye class="h-4 w-4" />
                     </router-link>
                     <button @click.stop="openEditDialog(device)"
@@ -493,13 +517,21 @@ import EditDeviceModal from '@/components/EditDeviceModal.vue'
 import DiscoveryModal from '@/components/DiscoveryModal.vue'
 import { getIcon } from '@/utils/icons'
 import * as LucideIcons from 'lucide-vue-next'
-const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar, Ban } = LucideIcons
+const { Eye, Pencil, Trash2, Download, Upload, RefreshCw, Loader2, Search, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, Activity, Wifi, Database, ZapOff, Ticket, Filter, Layers, ShieldCheck, ShieldAlert, Radar, Ban, Zap, Clock } = LucideIcons
 import { DateTime } from 'luxon'
 import { formatRelativeTime, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
 import { useWebSockets } from '@/composables/useWebSockets'
 
 const { lastNotification } = useWebSockets()
+const formatBytes = (bytes) => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
 const isNewDevice = (firstSeen) => {
   if (!firstSeen) return false
   try {

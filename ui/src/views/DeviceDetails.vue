@@ -905,8 +905,12 @@
     </div>
     </div>
 
-    <div v-else-if="activeTab === 'access'">
+    <div v-else-if="activeTab === 'access'" class="space-y-12">
       <InternetSchedules :deviceId="device.id" />
+      
+      <div class="border-t border-white/5 pt-12">
+        <DeviceQuotaManager :deviceId="device.id" />
+      </div>
     </div>
 
     <TerminalModal v-if="showTerminal" :device="device" :port="sshPort" @close="showTerminal = false" />
@@ -929,6 +933,7 @@ import { DateTime } from 'luxon'
 import { formatRelativeTime, formatDate, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
 import InternetSchedules from '@/components/InternetSchedules.vue'
+import DeviceQuotaManager from '@/components/DeviceQuotaManager.vue'
 
 const activeTab = ref('overview')
 const tabs = [
@@ -1045,24 +1050,34 @@ const getIPAllocationLabel = (val) => {
 const toggleBlock = async () => {
   if (!device.value) return
   if (!device.value.mac || device.value.mac === 'unknown' || device.value.mac === 'N/A') {
-    notify('Error', 'Cannot block device without a valid MAC address', 'error')
+    notifyError('Cannot block device without a valid MAC address')
     return
   }
   const isCurrentlyBlocked = device.value.is_blocked
   const action = isCurrentlyBlocked ? 'unblock' : 'block'
+
+  // Confirmation for unblocking if restricted by schedule or quota
+  if (isCurrentlyBlocked && (device.value.is_scheduled_block || device.value.is_quota_exceeded)) {
+    let reasons = []
+    if (device.value.is_scheduled_block) reasons.push('an active schedule')
+    if (device.value.is_quota_exceeded) reasons.push('an exceeded data quota')
+    
+    const confirmMsg = `This device is currently restricted by ${reasons.join(' and ')}. ` +
+                       `Manually unblocking will override these restrictions until the next cycle or reset. ` +
+                       `Do you want to continue?`
+                       
+    if (!confirm(confirmMsg)) return
+  }
   
   try {
     const res = await api.post(`/integrations/openwrt/devices/${device.value.mac}/${action}`)
     if (res.data.status === 'success') {
-      device.value.is_blocked = !isCurrentlyBlocked
-      notify(
-        'Success', 
-        `Device ${isCurrentlyBlocked ? 'unblocked' : 'blocked'} successfully`, 
-        'success'
-      )
+      // Re-fetch device to get updated state from policy engine
+      await fetchDevice()
+      notifySuccess(`Device ${isCurrentlyBlocked ? 'unblocked' : 'blocked'} successfully`)
     }
   } catch (err) {
-    notify('Error', err.response?.data?.detail || `Failed to ${action} device`, 'error')
+    notifyError(err.response?.data?.detail || `Failed to ${action} device`)
   }
 }
 

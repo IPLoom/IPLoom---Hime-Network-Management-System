@@ -118,10 +118,10 @@
             </div>
             
             <div class="flex items-center gap-1">
-              <button @click="editSchedule(s)" class="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-500 rounded-lg transition-all">
+              <button type="button" @click.stop="editSchedule(s)" class="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-500 rounded-lg transition-all">
                 <Pencil class="w-3.5 h-3.5" />
               </button>
-              <button @click="confirmDelete(s.id)" class="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-lg transition-all">
+              <button type="button" @click.stop="deleteSchedule(s.id)" class="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-lg transition-all">
                 <Trash2 class="w-3.5 h-3.5" />
               </button>
             </div>
@@ -234,6 +234,16 @@
         </div>
       </Dialog>
     </TransitionRoot>
+    <ConfirmationModal 
+      :isOpen="isDeleteModalOpen"
+      title="Delete Schedule"
+      message="Are you sure you want to permanently delete this internet access schedule? This cannot be undone."
+      confirmText="Delete Schedule"
+      type="danger"
+      :loading="isDeleting"
+      @close="isDeleteModalOpen = false"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -458,14 +468,31 @@ const toggleSchedule = async (s) => {
   }
 }
 
-const confirmDelete = async (id) => {
-  if (!confirm('Are you sure you want to delete this schedule?')) return
+import ConfirmationModal from '@/components/ConfirmationModal.vue'
+
+// ... existing refs ...
+const isDeleteModalOpen = ref(false)
+const scheduleToDelete = ref(null)
+const isDeleting = ref(false)
+
+const deleteSchedule = (id) => {
+  scheduleToDelete.value = id
+  isDeleteModalOpen.value = true
+}
+
+const confirmDelete = async () => {
+  if (!scheduleToDelete.value) return
+  isDeleting.value = true
   try {
-    await api.delete(`/internet-schedules/schedules/${id}`)
+    await api.delete(`/internet-schedules/schedules/${scheduleToDelete.value}`)
     notifySuccess('Schedule deleted')
     await fetchSchedules()
+    isDeleteModalOpen.value = false
   } catch (e) {
     notifyError('Failed to delete schedule')
+  } finally {
+    isDeleting.value = false
+    scheduleToDelete.value = null
   }
 }
 
