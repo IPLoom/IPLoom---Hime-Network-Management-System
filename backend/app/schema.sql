@@ -63,7 +63,23 @@ CREATE TABLE IF NOT EXISTS devices (
     parent_id     TEXT,
     is_blocked    BOOLEAN DEFAULT FALSE,
     has_schedule  BOOLEAN DEFAULT FALSE,
-    is_manual_block BOOLEAN DEFAULT FALSE
+    is_manual_block BOOLEAN DEFAULT FALSE,
+    is_scheduled_block BOOLEAN DEFAULT FALSE,
+    is_quota_exceeded BOOLEAN DEFAULT FALSE,
+    is_manual_unblock BOOLEAN DEFAULT FALSE
+);
+
+-- device_quotas
+CREATE TABLE IF NOT EXISTS device_quotas (
+    id               TEXT PRIMARY KEY,
+    device_id        TEXT NOT NULL,
+    limit_bytes      BIGINT NOT NULL,
+    period_hours     INTEGER NOT NULL DEFAULT 24,
+    current_usage    BIGINT DEFAULT 0,
+    last_reset_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_exceeded      BOOLEAN DEFAULT FALSE,
+    enabled          BOOLEAN DEFAULT TRUE,
+    UNIQUE(device_id)
 );
 
 CREATE TABLE IF NOT EXISTS device_status_history (

@@ -364,8 +364,17 @@ class OpenWRTClient:
                                 (id, device_id, rx_bytes, tx_bytes, down_rate, up_rate) 
                                 VALUES (?, ?, ?, ?, ?, ?)
                             """, [hist_id, target_id, t_total["down"], t_total["up"], t_delta["down"], t_delta["up"]])
+                            
+                            # Increment Quota Usage if defined
+                            delta_total = t_delta["down"] + t_delta["up"]
+                            if delta_total > 0:
+                                conn.execute("""
+                                    UPDATE device_quotas 
+                                    SET current_usage = current_usage + ? 
+                                    WHERE device_id = ? AND enabled = TRUE
+                                """, [delta_total, target_id])
                         except Exception as e:
-                             logger.error(f"Failed to insert traffic history for {mac}: {e}")
+                             logger.error(f"Failed to insert traffic history or update quota for {mac}: {e}")
 
                     # Update Device Table
                     if row:

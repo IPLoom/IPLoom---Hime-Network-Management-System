@@ -18,6 +18,10 @@ active_tasks = set()
 async def scheduler_loop():
     from app.services.mqtt import MQTTManager
     from app.services.internet_schedules import check_and_apply_schedules
+    from app.services.internet_quotas import check_and_apply_quotas
+    from app.services.policy import apply_device_policy
+    
+    last_convergence = 0
     while True:
         try:
             # 1. Handle background scan schedules & Integrations
@@ -26,7 +30,27 @@ async def scheduler_loop():
             # 2. Handle Internet Access Schedules
             await check_and_apply_schedules()
             
-            # 3. Check MQTT Health
+            # 3. Handle Internet Data Quotas
+            await check_and_apply_quotas()
+            
+            # 4. Periodically ensure policy convergence (every 60s)
+            # This retries any failed router calls from transient errors
+            if time.time() - last_convergence > 60:
+                last_convergence = time.time()
+                try:
+                    conn = get_connection()
+                    try:
+                        # Find devices where DB 'is_blocked' might mismatch combined flags
+                        # apply_device_policy has internal check 'if target != current'
+                        dev_rows = conn.execute("SELECT id FROM devices").fetchall()
+                        for (dev_id,) in dev_rows:
+                            await apply_device_policy(dev_id, conn)
+                    finally:
+                        conn.close()
+                except Exception as e:
+                    logger.error(f"Error in policy convergence task: {e}")
+
+            # 5. Check MQTT Health
             MQTTManager.get_instance().check_health()
             
         except Exception as e:

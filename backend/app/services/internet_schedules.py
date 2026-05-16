@@ -149,67 +149,59 @@ async def check_and_apply_schedules():
                     devices_in_window[device_id] = True
 
         # 3. Process transitions
+        from app.services.policy import update_policy_flag, update_policy_flags
         for device_id, in_window in devices_in_window.items():
             prev_in_window = _last_window_state.get(device_id)
             
-            # Fetch device MAC and current DB status
-            dev_row = conn.execute("SELECT mac, display_name, is_blocked, is_manual_block FROM devices WHERE id = ?", [device_id]).fetchone()
+            # Fetch device current DB status for baseline
+            dev_row = conn.execute("SELECT is_scheduled_block, display_name, mac FROM devices WHERE id = ?", [device_id]).fetchone()
             if not dev_row: continue
-            mac, name, db_is_blocked, is_manual_block = dev_row
+            db_is_scheduled, name, mac = dev_row
             
             # If first run for this device, use DB state as baseline
             if prev_in_window is None:
-                prev_in_window = bool(db_is_blocked)
+                prev_in_window = bool(db_is_scheduled)
                 _last_window_state[device_id] = prev_in_window
             
             # Only act on transition (desired state vs baseline/previous state)
             if in_window != prev_in_window:
-                # SPECIAL CASE: If schedule window ends but device is manually blocked, DO NOT UNBLOCK
-                if not in_window and is_manual_block:
-                    print(f"[Scheduler] Window ended for {name or mac} but manual block is active. Skipping unblock.")
-                    _last_window_state[device_id] = in_window
-                    continue
-
-                action = "blocking" if in_window else "unblocking"
-                print(f"[Scheduler] Transition detected for {name or mac}: {action}")
+                action = "entering" if in_window else "leaving"
+                logger.info(f"[Scheduler] Device {name or mac} is {action} a scheduled block window")
                 
                 try:
-                    client = OpenWRTClient(ow_config["url"], ow_config["username"], ow_config.get("password"))
-                    
-                    if in_window:
-                        await asyncio.to_thread(client.block_device, mac)
-                        log_msg = f"Scheduled block applied to {name or mac}"
-                    else:
-                        await asyncio.to_thread(client.unblock_device, mac)
-                        log_msg = f"Scheduled block removed from {name or mac}"
+                    # Centralized policy engine handles the actual blocking/unblocking
+                    # ensuring manual overrides and quotas are respected.
+                    # We clear the manual unblock override whenever a schedule window transitions
+                    await update_policy_flags(device_id, {
+                        "is_scheduled_block": in_window,
+                        "is_manual_unblock": False
+                    })
                     
                     log_task_event(
                         task_type="internet_schedule",
                         event_type="completed",
-                        message=log_msg,
+                        message=f"Schedule window {'started' if in_window else 'ended'} for {name or mac}",
                         level="INFO",
                         target=device_id
                     )
                     
-                    # Update device state in DB and update our memory state
-                    # Note: We don't touch is_manual_block here
-                    conn.execute("UPDATE devices SET is_blocked = ? WHERE id = ?", [in_window, device_id])
-                    from app.core.db import commit
-                    commit()
                     _last_window_state[device_id] = in_window
                     
                 except Exception as e:
-                    print(f"[Scheduler] Failed to apply {action} to {device_id}: {e}")
+                    logger.error(f"[Scheduler] Failed to apply schedule policy for {device_id}: {e}")
                     log_task_event(
                         task_type="internet_schedule",
                         event_type="failed",
-                        message=f"Failed to apply scheduled {action} to {name or mac}: {str(e)}",
+                        message=f"Failed to update schedule policy for {name or mac}: {str(e)}",
                         level="ERROR",
                         target=device_id
                     )
-                    # We DON'T update _last_window_state on failure so it retries next cycle
-
+        
+        # 4. Success, commit batch
+        from app.core.db import commit
+        commit()
+        
+    except Exception as e:
+        logger.error(f"Error in check_and_apply_schedules: {e}")
     finally:
         conn.close()
-
-
