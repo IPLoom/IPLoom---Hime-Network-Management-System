@@ -1,7 +1,7 @@
 from .config import ConfigItem, ConfigUpdate
 from .scans import ScanCreate, ScanRead, ScanResultRead
 from .devices import DeviceRead
-from .schedules import ScheduleCreate, ScheduleRead
+from .internet_schedules import DeviceBlockScheduleCreate, DeviceBlockScheduleRead
 
 __all__ = [
     "ConfigItem",
@@ -10,6 +10,6 @@ __all__ = [
     "ScanRead",
     "ScanResultRead",
     "DeviceRead",
-    "ScheduleCreate",
-    "ScheduleRead",
+    "DeviceBlockScheduleCreate",
+    "DeviceBlockScheduleRead",
 ]

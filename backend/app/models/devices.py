@@ -23,6 +23,7 @@ class DeviceRead(BaseModel):
     brand_icon: Optional[str] = None
     parent_id: Optional[str] = None
     is_blocked: bool = False
+    has_schedule: bool = False
 
 class DeviceUpdate(BaseModel):
     name: Optional[str] = None

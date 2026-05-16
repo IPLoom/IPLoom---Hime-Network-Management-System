@@ -147,6 +147,14 @@ def migrate_db(conn: duckdb.DuckDBPyConnection) -> None:
         print("Migration: Adding 'is_blocked' column to 'devices'")
         conn.execute("ALTER TABLE devices ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE")
 
+    if 'has_schedule' not in col_names:
+        print("Migration: Adding 'has_schedule' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN has_schedule BOOLEAN DEFAULT FALSE")
+
+    if 'is_manual_block' not in col_names:
+        print("Migration: Adding 'is_manual_block' column to 'devices'")
+        conn.execute("ALTER TABLE devices ADD COLUMN is_manual_block BOOLEAN DEFAULT FALSE")
+
     # Ensure device_status_history table exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS device_status_history (

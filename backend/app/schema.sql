@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS devices (
     open_ports    TEXT,
     attributes    TEXT,
     parent_id     TEXT,
-    is_blocked    BOOLEAN DEFAULT FALSE
+    is_blocked    BOOLEAN DEFAULT FALSE,
+    has_schedule  BOOLEAN DEFAULT FALSE,
+    is_manual_block BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS device_status_history (
@@ -119,6 +121,18 @@ CREATE TABLE IF NOT EXISTS device_traffic_history (
     up_rate     BIGINT DEFAULT 0
 );
 
+-- device_block_schedules
+CREATE TABLE IF NOT EXISTS device_block_schedules (
+    id               TEXT PRIMARY KEY,
+    device_id        TEXT NOT NULL,
+    name             TEXT,
+    start_time       TEXT NOT NULL, -- HH:MM (Local Time)
+    end_time         TEXT NOT NULL, -- HH:MM (Local Time)
+    days             TEXT NOT NULL, -- "0,1,2,3,4,5,6" (0=Monday)
+    enabled          BOOLEAN DEFAULT TRUE,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_history_device_id ON device_status_history(device_id);
 CREATE INDEX IF NOT EXISTS idx_history_changed_at ON device_status_history(changed_at);
@@ -129,3 +143,4 @@ CREATE INDEX IF NOT EXISTS idx_scan_results_mac ON scan_results(mac);
 CREATE INDEX IF NOT EXISTS idx_scan_results_ip ON scan_results(ip);
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 CREATE INDEX IF NOT EXISTS idx_scans_finished_at ON scans(finished_at);
+CREATE INDEX IF NOT EXISTS idx_block_schedules_device_id ON device_block_schedules(device_id);
