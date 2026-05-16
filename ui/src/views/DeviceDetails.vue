@@ -1,8 +1,7 @@
 <template>
   <div v-if="device" class="space-y-6 max-w-7xl mx-auto pb-12">
     <!-- Header Area -->
-    <!-- Header Area -->
-    <div class="sticky top-0 z-30 -mx-4 px-4 py-3 mb-8 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+    <div class="mb-8">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         
         <!-- Left: Identity & Context -->
@@ -194,8 +193,21 @@
       </div>
     </div>
 
+    <!-- Tabs Navigation -->
+    <div class="flex items-center gap-2 mb-2 bg-white/50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
+      <button v-for="tab in tabs" :key="tab.id"
+        @click="activeTab = tab.id"
+        class="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+        :class="activeTab === tab.id 
+          ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' 
+          : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'">
+        <component :is="tab.icon" class="w-3.5 h-3.5" />
+        <span>{{ tab.name }}</span>
+      </button>
+    </div>
+
     <!-- Main Content Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div v-if="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       <!-- Column 1 & 2: Main Info -->
       <div class="lg:col-span-2 space-y-6">
@@ -583,11 +595,31 @@
         </div>
 
 
+        </div>
 
+      <!-- Overview Sidebar -->
+      <div class="space-y-6">
+        <!-- Availability Metrics -->
+        <div class="premium-card">
+          <div class="flex items-center justify-between mb-8">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <div class="w-1.5 h-6 bg-emerald-500 rounded-full"></div>
+              Device Health
+            </h2>
+          </div>
+          <div class="space-y-4">
+            <div class="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
+              <div class="text-[10px] font-black uppercase text-slate-400 mb-1">Uptime (24h)</div>
+              <div class="text-2xl font-black text-blue-500">{{ uptimePercentage }}%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-
-
-        <!-- Traffic History Chart -->
+    <div v-else-if="activeTab === 'network'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Column 1 & 2: Performance & Security -->
+      <div class="lg:col-span-2 space-y-6">
         <div class="premium-card">
           <div class="flex items-center justify-between mb-8">
             <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -783,7 +815,7 @@
         </div>
       </div>
 
-      <!-- Column 3: Ports & Services (Sidebar) -->
+      <!-- Column 3: Network Services (Sidebar) -->
       <div class="space-y-6">
         <!-- Health & Uptime Metrics (Sidebar Stack) -->
         <div class="space-y-4">
@@ -868,29 +900,42 @@
               <span>Last Audit Scan</span>
               <span class="text-slate-400">{{ formatRelativeTime(device.last_seen) }}</span>
             </div>
-          </div>
         </div>
       </div>
     </div>
+    </div>
+
+    <div v-else-if="activeTab === 'access'">
+      <InternetSchedules :deviceId="device.id" />
+    </div>
+
     <TerminalModal v-if="showTerminal" :device="device" :port="sshPort" @close="showTerminal = false" />
   </div>
 </template>
 
 <script setup>
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue'
 import {
   ArrowLeft, Loader2, ScanSearch, Save, Search, ChevronDown, Activity, Terminal, ExternalLink, ShieldAlert, ShieldCheck,
-  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check, Ban, Radio, Network
+  Wifi, WifiOff, Pencil, Info, X, Fingerprint, Globe, Calendar, Cpu, Copy, Check, Ban, Radio, Network, Clock
 } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
+import { useSystemStore } from '@/stores/system'
+import { getIcon as resolveIcon } from '@/utils/icons'
 import TerminalModal from '../components/TerminalModal.vue'
 import { DateTime } from 'luxon'
 import { formatRelativeTime, formatDate, parseUTC } from '@/utils/date'
 import { useNotifications } from '@/composables/useNotifications'
-import { useSystemStore } from '@/stores/system'
-import { getIcon as resolveIcon } from '@/utils/icons'
+import InternetSchedules from '@/components/InternetSchedules.vue'
+
+const activeTab = ref('overview')
+const tabs = [
+  { id: 'overview', name: 'Overview', icon: Info },
+  { id: 'network', name: 'Network & Security', icon: ShieldCheck },
+  { id: 'access', name: 'Access Control', icon: Clock }
+]
 
 const systemStore = useSystemStore()
 const deviceTypes = computed(() => systemStore.deviceTypes)
@@ -1495,6 +1540,8 @@ const saveChanges = async () => {
   }
 }
 
+let pollInterval = null
+
 onMounted(async () => {
   await fetchDevice()
   systemStore.fetchConstants()
@@ -1506,7 +1553,21 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to fetch all devices:', e)
   }
+
+  // Start status polling
+  pollInterval = setInterval(async () => {
+    // Only refresh if the user hasn't made unsaved changes to avoid overwriting their work
+    if (!isSaving.value && !isChanged.value) {
+      await fetchDevice()
+      await fetchDeviceDns()
+    }
+  }, 10000)
 })
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
+
 
 
 </script>

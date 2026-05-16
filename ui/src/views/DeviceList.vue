@@ -247,6 +247,12 @@
                           v-tooltip="'Internet Access Blocked via OpenWrt'">
                           <Ban class="h-3 w-3" /> Blocked
                         </span>
+                        <!-- Scheduled Indicator -->
+                        <span v-if="device.has_schedule"
+                          class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 flex items-center gap-1"
+                          v-tooltip="'Recurring Internet Schedule Active'">
+                          <Clock class="h-3 w-3" /> Scheduled
+                        </span>
                       </div>
                     </div>
                   </div>
